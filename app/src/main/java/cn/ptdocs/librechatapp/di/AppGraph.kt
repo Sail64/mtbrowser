@@ -4,11 +4,13 @@ import android.content.Context
 import cn.ptdocs.librechatapp.data.LegacyMigrator
 import cn.ptdocs.librechatapp.data.PrefCertReminderStore
 import cn.ptdocs.librechatapp.data.PrefClientCertStore
+import cn.ptdocs.librechatapp.data.PrefProbeThrottleStore
 import cn.ptdocs.librechatapp.data.PrefSiteRepository
 import cn.ptdocs.librechatapp.domain.CertReminderScheduler
 import cn.ptdocs.librechatapp.domain.CertificateAdvisor
 import cn.ptdocs.librechatapp.domain.DefaultSslTrustPolicy
 import cn.ptdocs.librechatapp.domain.NavigationPolicy
+import cn.ptdocs.librechatapp.domain.ProbeThrottle
 import cn.ptdocs.librechatapp.domain.SslTrustPolicy
 import cn.ptdocs.librechatapp.domain.SiteRepository
 import cn.ptdocs.librechatapp.domain.DefaultCertificateAdvisor
@@ -33,6 +35,8 @@ object AppGraph {
         private set
     lateinit var navigationPolicy: NavigationPolicy
         private set
+    lateinit var probeThrottle: ProbeThrottle
+        private set
 
     fun init(context: Context) {
         val appContext = context.applicationContext
@@ -43,5 +47,6 @@ object AppGraph {
         reminderScheduler = PrefCertReminderStore(appContext)
         sslTrustPolicy = DefaultSslTrustPolicy(certAdvisor)
         navigationPolicy = DefaultNavigationPolicy()
+        probeThrottle = PrefProbeThrottleStore(appContext)
     }
 }

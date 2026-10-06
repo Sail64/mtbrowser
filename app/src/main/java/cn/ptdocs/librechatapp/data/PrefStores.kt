@@ -3,6 +3,7 @@ package cn.ptdocs.librechatapp.data
 import android.content.Context
 import cn.ptdocs.librechatapp.domain.CertReminderScheduler
 import cn.ptdocs.librechatapp.domain.ClientCertSelector
+import cn.ptdocs.librechatapp.domain.ProbeThrottle
 import cn.ptdocs.librechatapp.domain.SiteRepository
 import cn.ptdocs.librechatapp.domain.model.CertKind
 import cn.ptdocs.librechatapp.domain.model.Site
@@ -69,8 +70,8 @@ class PrefCertReminderStore(context: Context) : CertReminderScheduler {
     private val key = "cert_warn_at"
     private val intervalMs = 24 * 60 * 60 * 1000L
 
-    private fun load(): MutableMap<String, Long> {
-        val raw = prefs.getString(key, null) ?: return mutableMapOf()
+    private fun load(rawKey: String): MutableMap<String, Long> {
+        val raw = prefs.getString(rawKey, null) ?: return mutableMapOf()
         return try {
             val arr = JSONArray(raw)
             (0 until arr.length()).associate {
@@ -82,19 +83,54 @@ class PrefCertReminderStore(context: Context) : CertReminderScheduler {
         }
     }
 
+    private fun save(rawKey: String, map: Map<String, Long>) {
+        val arr = JSONArray()
+        map.forEach { (k, at) -> arr.put(JSONObject().put("k", k).put("at", at)) }
+        prefs.edit().putString(rawKey, arr.toString()).apply()
+    }
+
     private fun k(host: String, kind: CertKind) = "${kind.name}:$host"
 
     override fun shouldRemind(host: String, kind: CertKind, now: Long): Boolean {
-        val last = load()[k(host, kind)] ?: return true
+        val last = load(key)[k(host, kind)] ?: return true
         return now - last >= intervalMs
     }
 
     override fun markReminded(host: String, kind: CertKind, now: Long) {
-        val map = load()
+        val map = load(key)
         map[k(host, kind)] = now
-        val arr = JSONArray()
-        map.forEach { (key, at) -> arr.put(JSONObject().put("k", key).put("at", at)) }
-        prefs.edit().putString(key, arr.toString()).apply()
+        save(key, map)
+    }
+}
+
+/**
+ * 旁路探测限频：与「提醒」分离——证书正常时也要记录探测时间，
+ * 否则会退化成每次页面加载都发一次探测连接。
+ */
+class PrefProbeThrottleStore(context: Context) : ProbeThrottle {
+
+    private val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+    private val key = "cert_probe_at"
+    private val intervalMs = 24 * 60 * 60 * 1000L
+
+    override fun shouldRun(host: String, now: Long): Boolean {
+        val raw = prefs.getString(key, null) ?: return true
+        val last = try {
+            JSONObject(raw).optLong(host, 0L)
+        } catch (e: Exception) {
+            0L
+        }
+        return now - last >= intervalMs
+    }
+
+    override fun markRun(host: String, now: Long) {
+        val obj = try {
+            JSONObject(prefs.getString(key, null) ?: "{}")
+        } catch (e: Exception) {
+            JSONObject()
+        }
+        obj.put(host, now)
+        prefs.edit().putString(key, obj.toString()).apply()
     }
 }
 

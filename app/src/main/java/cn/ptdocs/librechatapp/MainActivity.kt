@@ -69,9 +69,10 @@ class MainActivity : AppCompatActivity() {
         setupBrowser()
 
         // 恢复：优先 restoreState（转屏/进程回收），否则打开上次访问的站点
-        val restored = savedInstanceState?.getBundle(KEY_WEBVIEW_STATE)?.let {
+        val restoredView = savedInstanceState?.getBoolean(KEY_IN_BROWSER, false) ?: false
+        val restored = (savedInstanceState?.getBundle(KEY_WEBVIEW_STATE)?.let {
             webView.restoreState(it)
-        } != null
+        } != null) && restoredView
         if (restored) {
             showBrowser(updateHomeList = false)
         } else {
@@ -152,7 +153,7 @@ class MainActivity : AppCompatActivity() {
             enhancers = listOf(
                 CookieFlushEnhancer(),
                 RenameFocusEnhancer(),
-                ServerCertCheckEnhancer(AppGraph.certAdvisor, AppGraph.reminderScheduler)
+                ServerCertCheckEnhancer(AppGraph.certAdvisor, AppGraph.reminderScheduler, AppGraph.probeThrottle)
             ),
             onUrlChanged = { url -> runOnUiThread { onUrlChanged(url) } }
         )
@@ -244,6 +245,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
+        outState.putBoolean(KEY_IN_BROWSER, inBrowser)
         if (inBrowser) {
             val bundle = Bundle()
             webView.saveState(bundle)
@@ -265,5 +267,6 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val KEY_WEBVIEW_STATE = "webview_state"
+        private const val KEY_IN_BROWSER = "in_browser"
     }
 }

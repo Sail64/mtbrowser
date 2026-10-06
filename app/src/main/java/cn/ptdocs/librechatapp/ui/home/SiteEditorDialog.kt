@@ -6,6 +6,7 @@ import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
+import cn.ptdocs.librechatapp.data.PrefSiteRepository
 import cn.ptdocs.librechatapp.domain.SiteRepository
 import cn.ptdocs.librechatapp.domain.model.Site
 
@@ -68,6 +69,7 @@ object SiteEditorDialog {
                 val url = normalizeUrl(urlInput.text.toString())
                 if (url.isEmpty()) return@setPositiveButton
                 val name = nameInput.text.toString().trim()
+                    .ifBlank { PrefSiteRepository.hostOf(url) ?: url }
                 if (existing == null) {
                     repository.add(name, url, renameFixCheck.isChecked)
                 } else {

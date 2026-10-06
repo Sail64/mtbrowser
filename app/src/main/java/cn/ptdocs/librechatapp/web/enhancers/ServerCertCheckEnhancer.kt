@@ -7,6 +7,7 @@ import android.webkit.WebView
 import cn.ptdocs.librechatapp.data.PrefSiteRepository
 import cn.ptdocs.librechatapp.domain.CertReminderScheduler
 import cn.ptdocs.librechatapp.domain.CertificateAdvisor
+import cn.ptdocs.librechatapp.domain.ProbeThrottle
 import cn.ptdocs.librechatapp.domain.model.CertKind
 import cn.ptdocs.librechatapp.domain.model.CertVerdict
 import cn.ptdocs.librechatapp.domain.model.Site
@@ -19,7 +20,8 @@ import cn.ptdocs.librechatapp.web.PageEnhancer
  */
 class ServerCertCheckEnhancer(
     private val advisor: CertificateAdvisor,
-    private val reminders: CertReminderScheduler
+    private val reminders: CertReminderScheduler,
+    private val probeThrottle: ProbeThrottle
 ) : PageEnhancer {
 
     companion object {
@@ -33,15 +35,18 @@ class ServerCertCheckEnhancer(
 
     override fun onPageFinished(activity: Activity, view: WebView, url: String, site: Site?) {
         val host = PrefSiteRepository.hostOf(url) ?: return
-        if (!reminders.shouldRemind(host, CertKind.SERVER)) return
+        if (!probeThrottle.shouldRun(host)) return
+        probeThrottle.markRun(host)
 
         HttpsCertProber.probeAsync(url) { cert ->
             if (cert == null) return@probeAsync
             val verdict = advisor.evaluate(cert, CertKind.SERVER)
             if (verdict == CertVerdict.VALID) return@probeAsync
+            if (!reminders.shouldRemind(host, CertKind.SERVER)) return@probeAsync
 
             Log.d(TAG, "Server certificate $verdict for $host")
             reminders.markReminded(host, CertKind.SERVER)
+            if (activity.isFinishing || activity.isDestroyed) return@probeAsync
             AlertDialog.Builder(activity)
                 .setTitle("证书到期提醒")
                 .setMessage(advisor.message(verdict, CertKind.SERVER, advisor.daysLeft(cert)))

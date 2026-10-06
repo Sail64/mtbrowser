@@ -49,6 +49,7 @@ class BrowserWebViewClient(
     }
 
     private val lastCertClearTime = ConcurrentHashMap<String, Long>()
+    private val showingSslDialogs = ConcurrentHashMap.newKeySet<String>()
 
     // ---------- 导航 ----------
 
@@ -149,12 +150,23 @@ class BrowserWebViewClient(
 
         when (val decision = sslTrustPolicy.onError(host, certInfo, errorKind)) {
             is SslTrustPolicy.Decision.Proceed -> handler.proceed()
-            is SslTrustPolicy.Decision.AskUser -> askUserAboutSslError(host, handler, decision.reason)
+            is SslTrustPolicy.Decision.AskUser -> {
+                if (activity.isFinishing || activity.isDestroyed) {
+                    handler.cancel()
+                } else {
+                    askUserAboutSslError(host, handler, decision.reason)
+                }
+            }
             is SslTrustPolicy.Decision.Deny -> handler.cancel()
         }
     }
 
     private fun askUserAboutSslError(host: String, handler: SslErrorHandler, reason: String) {
+        // 同一 host 的多个子资源可能同时报 SSL 错误，只弹一个对话框，其余直接取消
+        if (!showingSslDialogs.add(host)) {
+            handler.cancel()
+            return
+        }
         activity.runOnUiThread {
             AlertDialog.Builder(activity)
                 .setTitle("SSL 证书警告")
@@ -165,6 +177,7 @@ class BrowserWebViewClient(
                     handler.proceed()
                 }
                 .setOnCancelListener { handler.cancel() }
+                .setOnDismissListener { showingSslDialogs.remove(host) }
                 .show()
         }
     }
