@@ -302,6 +302,10 @@ class MtlsWebViewClient(
         CookieManager.getInstance().flush()
         Log.d(TAG, "Page finished, cookies flushed: $url")
 
+        if (Prefs.getRenameFocusFix(activity)) {
+            RenameFocusGuard.inject(view)
+        }
+
         checkServerCertificateExpiry(url)
 
         val cookies = CookieManager.getInstance().getCookie(url)

@@ -7,6 +7,7 @@ object Prefs {
     private const val FILE = "mtls_webview"
     private const val KEY_ALIAS = "keychain_alias"
     private const val KEY_BASE_URL = "base_url"
+    private const val KEY_RENAME_FOCUS_FIX = "rename_focus_fix"
 
     fun getAlias(ctx: Context): String? =
         ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(KEY_ALIAS, null)
@@ -34,6 +35,17 @@ object Prefs {
         ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_BASE_URL, url)
+            .apply()
+    }
+
+    fun getRenameFocusFix(ctx: Context): Boolean =
+        ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_RENAME_FOCUS_FIX, true)
+
+    fun setRenameFocusFix(ctx: Context, enabled: Boolean) {
+        ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_RENAME_FOCUS_FIX, enabled)
             .apply()
     }
 

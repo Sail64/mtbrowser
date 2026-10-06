@@ -131,23 +131,41 @@ class MainActivity : AppCompatActivity() {
     private fun showSettingsDialog(cancelable: Boolean) {
         val editText = EditText(this)
         editText.setText(Prefs.getBaseUrl(this))
-        
-        val container = android.widget.FrameLayout(this)
-        val params = android.widget.FrameLayout.LayoutParams(
+
+        val checkBox = android.widget.CheckBox(this)
+        checkBox.text = "修复重命名会话时键盘自动收起"
+        checkBox.isChecked = Prefs.getRenameFocusFix(this)
+
+        val container = android.widget.LinearLayout(this)
+        container.orientation = android.widget.LinearLayout.VERTICAL
+        val margin = (20 * resources.displayMetrics.density).toInt()
+
+        val editParams = android.widget.LinearLayout.LayoutParams(
             android.view.ViewGroup.LayoutParams.MATCH_PARENT,
             android.view.ViewGroup.LayoutParams.WRAP_CONTENT
         )
-        val margin = (20 * resources.displayMetrics.density).toInt()
-        params.leftMargin = margin
-        params.rightMargin = margin
-        editText.layoutParams = params
+        editParams.leftMargin = margin
+        editParams.rightMargin = margin
+        editText.layoutParams = editParams
+
+        val checkParams = android.widget.LinearLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        checkParams.leftMargin = margin
+        checkParams.rightMargin = margin
+        checkParams.topMargin = (12 * resources.displayMetrics.density).toInt()
+        checkBox.layoutParams = checkParams
+
         container.addView(editText)
+        container.addView(checkBox)
 
         val builder = AlertDialog.Builder(this)
-            .setTitle("设置服务器地址")
+            .setTitle("设置")
             .setView(container)
             .setCancelable(cancelable)
             .setPositiveButton("保存") { _, _ ->
+                Prefs.setRenameFocusFix(this, checkBox.isChecked)
                 val newUrl = editText.text.toString().trim()
                 if (newUrl.isNotEmpty()) {
                     Prefs.setBaseUrl(this, newUrl)
