@@ -2,9 +2,10 @@
 
 > **Unofficial Client Notice**
 >
-> This is an **unofficial Android client** for **LibreChat**. It simply wraps the web UI in a
-> full-screen WebView so you can access your LibreChat server on Android. It is **not affiliated with
-> the official LibreChat team**.
+> This project started as an **unofficial Android client** for **LibreChat** and has evolved into a
+> **general-purpose mTLS browser**: bookmark-centric, any self-hosted mTLS service (LibreChat,
+> internal admin panels, etc.) can be added and visited. It is **not affiliated with the official
+> LibreChat team**.
 
 ## Screenshots
 
@@ -29,16 +30,26 @@ frictions:
    heavyweight browsers like Chrome or Firefox handle this well, and they feel overkill on mobile.
 
 That’s why I built LibreChatApp: a lightweight Android WebView client for a self-hosted LibreChat
-server. It supports server URL configuration, mTLS client certificate selection & caching, expiry
-warnings, and file upload/download.
+server. As usage grew, I needed to reach other mTLS-protected sites too, so it has evolved into a
+**general-purpose mTLS browser**: bookmark any site or type a URL directly, and every site shares
+mTLS client certificate selection & caching, expiry warnings, and file upload/download.
+
+Design & implementation details: [docs/DESIGN_通用浏览器改造.md](docs/DESIGN_通用浏览器改造.md).
 
 ---
 
 ## Features
 
-- **Server URL configuration** (set on first launch, update anytime)
-- **mTLS client certificate support** (pick a cert, cache the alias, expiry warning)
-- **Invalid cert handling** (warns a month before expiry and supports server-side revocation)
+- **Bookmark home** (native layout, add/edit/delete, empty-state guide; legacy server URL is
+  auto-migrated on first launch)
+- **Address bar** (auto-prefixes `https://`; http/https always open in-app)
+- **Bottom toolbar** (back/forward/home/reload/one-tap bookmark) and **immersive scrolling**
+  (scroll down hides toolbar & status bar, scroll up restores)
+- **mTLS client certificate support** (per-site alias cache, expiry warning — at most once per
+  site per day)
+- **Controllable SSL error handling** (self-signed/expired certs prompt the user; "proceed anyway"
+  grants a session-only exemption)
+- **Invalid cert handling** (clears the cached cert on main-frame 400 and re-prompts)
 - **Secure WebView settings** (disallow mixed content, disable third-party cookies)
 - **File upload & download support** (HTTP, data URL, blob URL; saved to system Downloads)
 
@@ -46,16 +57,20 @@ warnings, and file upload/download.
 
 ## Usage
 
-### 1. Set Server URL
-On first launch, you must set the server URL. Later, you can tap **"设置服务器地址"** at the bottom
-when you’re on the login page or when cookies are missing.
+### 1. Add a Site
+On first launch, tap **"＋ 添加"** on the bookmark home. Tap ☆ while browsing to bookmark the
+current page. Long-press a bookmark to edit or delete it. A legacy server URL is migrated
+automatically into the first bookmark "LibreChat".
 
 ### 2. Client Certificate (mTLS)
-If your server uses mutual TLS, the app will prompt you to select a client certificate. The chosen
-alias is cached, and you’ll see warnings as the certificate approaches expiration.
+If a site uses mutual TLS, the app prompts you to select a client certificate. The alias is cached
+per site (no cross-site interference), and you'll get expiry warnings (at most once per site daily).
 
 ### 3. File Upload & Downloads
 Supports uploading files in chats and downloading exported conversation records.
+
+### 4. Immersive Browsing
+Scrolling down hides the toolbar and status bar; scrolling up or reaching the top restores them.
 
 ---
 
@@ -83,13 +98,29 @@ On success, `release.apk` will be generated in the project root.
 
 ```
 app/src/main/java/cn/ptdocs/librechatapp/
-├── MainActivity.kt               # WebView container & settings entry
-├── storage/Prefs.kt              # SharedPreferences (server URL, cert alias)
+├── MainActivity.kt                 # Thin controller: home/browser view switch, back key, state
+├── domain/                         # Pure business interfaces & models (no Android deps)
+│   ├── CertificateAdvisor.kt       # Single source of truth for cert evaluation
+│   ├── CertReminderScheduler.kt    # Reminder dedup (once per site per day)
+│   ├── ClientCertSelector.kt       # Client cert selection & caching
+│   ├── SslTrustPolicy.kt           # SSL trust policy (session exemptions)
+│   ├── NavigationPolicy.kt         # Navigation policy (in-app vs external)
+│   ├── SiteRepository.kt           # Site (bookmark) repository
+│   └── model/                      # Site / CertInfo / CertVerdict etc.
+├── data/                           # SharedPreferences+JSON impl, legacy migration
+├── platform/                       # KeyChain selector, server cert prober
+├── di/AppGraph.kt                  # Lightweight DI container (composition root)
+├── storage/Prefs.kt                # Global metadata (last_url)
+├── ui/
+│   ├── home/                       # Bookmark home, editor dialog
+│   └── ImmersiveScrollHelper.kt    # Immersive scrolling (toolbar/status bar)
 └── web/
-    ├── AppWebChromeClient.kt     # File chooser callbacks
-    ├── DownloadHandler.kt        # Download handling (HTTP / data / blob)
-    ├── MtlsWebViewClient.kt      # mTLS logic, external link handling, expiry warning
-    └── WebViewConfigurator.kt    # WebView security config
+    ├── BrowserWebViewClient.kt     # Thin glue: WebView callbacks → domain components
+    ├── PageEnhancer.kt             # Page enhancer registry (onPageFinished hooks)
+    ├── enhancers/                  # Cookie flush / rename focus fix / server cert check
+    ├── AppWebChromeClient.kt       # File chooser callbacks
+    ├── DownloadHandler.kt          # Download handling (HTTP / data / blob)
+    └── WebViewConfigurator.kt      # WebView security config
 ```
 
 ---
