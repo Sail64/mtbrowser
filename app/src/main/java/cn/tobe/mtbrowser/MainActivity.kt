@@ -165,10 +165,6 @@ class MainActivity : AppCompatActivity() {
             listContainer = findViewById(R.id.tab_list),
             manager = tabManager,
             onSelect = { attachTab(it) },
-            onNewTab = {
-                attachTab(tabManager.newTab())
-                updateTabsButton()
-            },
             onAllClosed = { showHome() }
         )
         findViewById<View>(R.id.btn_new_tab).setOnClickListener {
@@ -199,7 +195,9 @@ class MainActivity : AppCompatActivity() {
             ),
             onUrlChanged = { url -> runOnUiThread { onTabUrlChanged(wv, url) } }
         )
-        wv.webChromeClient = AppWebChromeClient(this)
+        wv.webChromeClient = AppWebChromeClient(this) { title ->
+            onTabTitleChanged(wv, title)
+        }
         DownloadHandler(this).setup(wv)
         return wv
     }
@@ -207,6 +205,12 @@ class MainActivity : AppCompatActivity() {
     /** 把标签的 WebView 挂到 web_slot（插到 FAB 之下），保证 slot 内只有当前标签一个 WebView。 */
     private fun attachTab(tab: cn.tobe.mtbrowser.web.Tab) {
         tabManager.select(tab)
+        if (tab.webView.parent === webSlot) {
+            // 已挂载且是当前标签，无需重挂（避免切标签时闪烁）
+            updateTabsButton()
+            onCurrentTabUiChanged()
+            return
+        }
         for (i in webSlot.childCount - 1 downTo 0) {
             if (webSlot.getChildAt(i) is WebView) webSlot.removeViewAt(i)
         }
@@ -232,6 +236,10 @@ class MainActivity : AppCompatActivity() {
             tab.title = webView.title.orEmpty()
         }
         if (webView === currentWebView()) onCurrentTabUiChanged(url)
+    }
+
+    private fun onTabTitleChanged(webView: WebView, title: String) {
+        tabManager.tabs().firstOrNull { it.webView === webView }?.title = title
     }
 
     /** 当前标签变化后刷新地址栏 / 收藏角标 / 最近 URL。 */

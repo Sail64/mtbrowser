@@ -42,10 +42,16 @@ class TabManager(
         current = tab
         return tab
     }
-
     fun select(tab: Tab) {
         if (!tabs.contains(tab)) return
         current = tab
+        touch(tab)
+    }
+
+    /** 最近使用排序：tabs.last 最新，tabs.first 最久未用（LRU 淘汰依据）。 */
+    private fun touch(tab: Tab) {
+        tabs.remove(tab)
+        tabs.add(tab)
     }
 
     /**

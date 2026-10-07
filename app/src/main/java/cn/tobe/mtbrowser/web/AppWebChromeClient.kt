@@ -7,7 +7,8 @@ import android.webkit.WebView
 import cn.tobe.mtbrowser.MainActivity
 
 class AppWebChromeClient(
-    private val activity: MainActivity
+    private val activity: MainActivity,
+    private val onTitle: (String) -> Unit = {}
 ) : WebChromeClient() {
 
     override fun onShowFileChooser(
@@ -16,5 +17,9 @@ class AppWebChromeClient(
         fileChooserParams: FileChooserParams?
     ): Boolean {
         return activity.showFileChooser(filePathCallback, fileChooserParams)
+    }
+
+    override fun onReceivedTitle(view: WebView?, title: String?) {
+        onTitle(title.orEmpty())
     }
 }

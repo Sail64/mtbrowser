@@ -21,7 +21,6 @@ class TabSwitcher(
     private val listContainer: LinearLayout,
     private val manager: TabManager,
     private val onSelect: (Tab) -> Unit,
-    private val onNewTab: () -> Unit,
     private val onAllClosed: () -> Unit
 ) {
 
