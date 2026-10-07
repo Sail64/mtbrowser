@@ -58,6 +58,9 @@ class ImmersiveScrollHelper(
 
     fun isFullscreen(): Boolean = fullscreen
 
+    /** 工具栏当前是否处于隐藏（滚动联动或全屏）状态。 */
+    fun isBarsHidden(): Boolean = immersive || fullscreen
+
     /** @return 切换后的全屏状态。 */
     fun toggleFullscreen(): Boolean {
         setFullscreen(!fullscreen)

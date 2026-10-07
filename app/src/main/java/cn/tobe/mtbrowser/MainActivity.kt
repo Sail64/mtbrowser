@@ -86,7 +86,7 @@ class MainActivity : AppCompatActivity() {
         btnFullscreen = findViewById(R.id.btn_fullscreen)
         progressBar = findViewById(R.id.progress_bar)
 
-        immersive = ImmersiveScrollHelper(this, listOf(topBar, bottomToolbar), thresholdPx = 24)
+        immersive = ImmersiveScrollHelper(this, listOf(topBar, progressBar, bottomToolbar), thresholdPx = 24)
 
         setupTabs()
         setupHome()
@@ -259,7 +259,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateProgressBar(progress: Int) {
         progressBar.progress = progress
-        progressBar.visibility = if (progress in 1..99) View.VISIBLE else View.GONE
+        // 尊重沉浸状态：滚动隐藏/全屏期间不单独顶出进度条
+        progressBar.visibility =
+            if (progress in 1..99 && !immersive.isBarsHidden()) View.VISIBLE else View.GONE
     }
 
     /** 当前标签变化后刷新地址栏 / 收藏角标 / 最近 URL。 */
@@ -304,9 +306,10 @@ class MainActivity : AppCompatActivity() {
         btnFullscreen.setOnTouchListener { v, event -> onFabTouch(v, event) }
         // 布局完成后恢复上次位置（webSlot 尚未布局/不可见时跳过，showBrowser 会再试）
         btnFullscreen.post { restoreFabPosition() }
-        // 工具栏隐藏/恢复会改变 webSlot 尺寸，FAB 可能落到可视区外，重钳并存档
+        // 工具栏显隐会改变 webSlot 尺寸：FAB 重钳入界；进度条按真实加载进度重设显隐
         immersive.onBarsVisibilityChanged = {
             btnFullscreen.post { snapFabIntoBounds() }
+            progressBar.post { updateProgressBar(currentWebView()?.progress ?: 0) }
         }
     }
 
