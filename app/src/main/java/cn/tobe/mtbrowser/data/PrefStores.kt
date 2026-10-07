@@ -150,7 +150,6 @@ class PrefSiteRepository(context: Context) : SiteRepository {
                     id = o.getString("id"),
                     name = o.getString("name"),
                     url = o.getString("url"),
-                    renameFocusFix = o.optBoolean("renameFocusFix", false),
                     createdAt = o.optLong("createdAt", 0L)
                 )
             }.toMutableList()
@@ -167,7 +166,6 @@ class PrefSiteRepository(context: Context) : SiteRepository {
                     .put("id", it.id)
                     .put("name", it.name)
                     .put("url", it.url)
-                    .put("renameFocusFix", it.renameFocusFix)
                     .put("createdAt", it.createdAt)
             )
         }
@@ -182,13 +180,12 @@ class PrefSiteRepository(context: Context) : SiteRepository {
     override fun findByUrl(url: String): Site? =
         load().firstOrNull { normalize(it.url) == normalize(url) }
 
-    override fun add(name: String, url: String, renameFocusFix: Boolean): Site {
+    override fun add(name: String, url: String): Site {
         val sites = load()
         val site = Site(
             id = UUID.randomUUID().toString(),
             name = name.ifBlank { hostOf(url) ?: url },
-            url = url,
-            renameFocusFix = renameFocusFix
+            url = url
         )
         sites.add(site)
         save(sites)

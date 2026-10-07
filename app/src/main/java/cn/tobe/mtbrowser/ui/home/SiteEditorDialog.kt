@@ -3,7 +3,6 @@ package cn.tobe.mtbrowser.ui.home
 import android.app.Activity
 import android.app.AlertDialog
 import android.view.ViewGroup
-import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import cn.tobe.mtbrowser.data.PrefSiteRepository
@@ -41,10 +40,6 @@ object SiteEditorDialog {
             hint = "地址，例如 example.com:8443"
             setText(existing?.url ?: prefillUrl)
         }
-        val renameFixCheck = CheckBox(activity).apply {
-            text = "修复重命名会话时键盘自动收起（LibreChat）"
-            isChecked = existing?.renameFocusFix ?: false
-        }
 
         fun layoutParams(top: Int = 0) = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -59,7 +54,6 @@ object SiteEditorDialog {
             orientation = LinearLayout.VERTICAL
             addView(nameInput, layoutParams())
             addView(urlInput, layoutParams(12.dp(activity)))
-            addView(renameFixCheck, layoutParams(12.dp(activity)))
         }
 
         AlertDialog.Builder(activity)
@@ -71,15 +65,9 @@ object SiteEditorDialog {
                 val name = nameInput.text.toString().trim()
                     .ifBlank { PrefSiteRepository.hostOf(url) ?: url }
                 if (existing == null) {
-                    repository.add(name, url, renameFixCheck.isChecked)
+                    repository.add(name, url)
                 } else {
-                    repository.update(
-                        existing.copy(
-                            name = name,
-                            url = url,
-                            renameFocusFix = renameFixCheck.isChecked
-                        )
-                    )
+                    repository.update(existing.copy(name = name, url = url))
                 }
                 onSaved()
             }

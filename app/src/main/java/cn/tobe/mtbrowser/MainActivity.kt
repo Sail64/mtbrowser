@@ -1,8 +1,11 @@
 package cn.tobe.mtbrowser
 
 import android.os.Bundle
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.webkit.WebView
 import android.webkit.CookieManager
 import android.webkit.ValueCallback
@@ -21,6 +24,7 @@ import cn.tobe.mtbrowser.di.AppGraph
 import cn.tobe.mtbrowser.domain.model.Site
 import cn.tobe.mtbrowser.platform.KeyChainCertSelector
 import cn.tobe.mtbrowser.storage.Prefs
+import kotlin.math.abs
 import cn.tobe.mtbrowser.ui.ImmersiveScrollHelper
 import cn.tobe.mtbrowser.ui.TabSwitcher
 import cn.tobe.mtbrowser.ui.home.HomeView
@@ -32,7 +36,6 @@ import cn.tobe.mtbrowser.web.TabManager
 import cn.tobe.mtbrowser.web.Tab
 import cn.tobe.mtbrowser.web.WebViewConfigurator
 import cn.tobe.mtbrowser.web.enhancers.CookieFlushEnhancer
-import cn.tobe.mtbrowser.web.enhancers.RenameFocusEnhancer
 import cn.tobe.mtbrowser.web.enhancers.ServerCertCheckEnhancer
 
 class MainActivity : AppCompatActivity() {
@@ -148,6 +151,7 @@ class MainActivity : AppCompatActivity() {
         homeContainer.visibility = View.GONE
         browserContainer.visibility = View.VISIBLE
         if (updateHomeList) homeView.render()
+        btnFullscreen.post { restoreFabPosition() }
     }
 
     fun openSite(site: Site) {
@@ -191,7 +195,6 @@ class MainActivity : AppCompatActivity() {
             sites = AppGraph.siteRepository,
             enhancers = listOf(
                 CookieFlushEnhancer(),
-                RenameFocusEnhancer(),
                 ServerCertCheckEnhancer(AppGraph.certAdvisor, AppGraph.reminderScheduler, AppGraph.probeThrottle)
             ),
             onUrlChanged = { url -> runOnUiThread { onTabUrlChanged(wv, url) } }
@@ -271,6 +274,72 @@ class MainActivity : AppCompatActivity() {
             val fullscreen = immersive.toggleFullscreen()
             btnFullscreen.setImageResource(if (fullscreen) R.drawable.ic_collapse else R.drawable.ic_expand)
         }
+        setupFabDrag()
+    }
+
+    // ---------- 浮动全屏按钮：可拖动并记忆位置 ----------
+
+    private var fabDragged = false
+    private var fabLastRawX = 0f
+    private var fabLastRawY = 0f
+    private val fabTouchSlop by lazy { ViewConfiguration.get(this).scaledTouchSlop }
+
+    private fun setupFabDrag() {
+        btnFullscreen.setOnTouchListener { v, event -> onFabTouch(v, event) }
+        // 布局完成后恢复上次位置（webSlot 尚未布局/不可见时跳过，showBrowser 会再试）
+        btnFullscreen.post { restoreFabPosition() }
+    }
+
+    private fun onFabTouch(v: View, event: MotionEvent): Boolean {
+        val lp = v.layoutParams as FrameLayout.LayoutParams
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                fabLastRawX = event.rawX
+                fabLastRawY = event.rawY
+                fabDragged = false
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val dx = event.rawX - fabLastRawX
+                val dy = event.rawY - fabLastRawY
+                if (!fabDragged && (abs(dx) > fabTouchSlop || abs(dy) > fabTouchSlop)) fabDragged = true
+                if (fabDragged) {
+                    lp.leftMargin += dx.toInt()
+                    lp.topMargin += dy.toInt()
+                    clampFab(lp)
+                    v.layoutParams = lp
+                    fabLastRawX = event.rawX
+                    fabLastRawY = event.rawY
+                }
+                return true
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (fabDragged) {
+                    Prefs.setFabPos(this, lp.leftMargin, lp.topMargin)
+                } else if (event.actionMasked == MotionEvent.ACTION_UP) {
+                    v.performClick()
+                }
+                return true
+            }
+        }
+        return false
+    }
+
+    /** 把 margin 夹在 webSlot 可用范围内。 */
+    private fun clampFab(lp: FrameLayout.LayoutParams) {
+        if (webSlot.width <= 0 || webSlot.height <= 0) return
+        lp.leftMargin = lp.leftMargin.coerceIn(0, (webSlot.width - btnFullscreen.width).coerceAtLeast(0))
+        lp.topMargin = lp.topMargin.coerceIn(0, (webSlot.height - btnFullscreen.height).coerceAtLeast(0))
+    }
+
+    private fun restoreFabPosition() {
+        if (webSlot.width <= 0 || webSlot.height <= 0) return
+        val pos = Prefs.getFabPos(this) ?: return
+        val lp = btnFullscreen.layoutParams as FrameLayout.LayoutParams
+        lp.leftMargin = pos.first
+        lp.topMargin = pos.second
+        clampFab(lp)
+        btnFullscreen.layoutParams = lp
     }
 
     private fun exitFullscreen() {

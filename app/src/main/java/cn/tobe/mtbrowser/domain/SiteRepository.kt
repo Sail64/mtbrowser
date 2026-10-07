@@ -6,7 +6,7 @@ import cn.tobe.mtbrowser.domain.model.Site
 interface SiteRepository {
     fun all(): List<Site>
     fun byHost(host: String): Site?
-    fun add(name: String, url: String, renameFocusFix: Boolean = false): Site
+    fun add(name: String, url: String): Site
     fun update(site: Site)
     fun remove(id: String)
     fun findByUrl(url: String): Site?

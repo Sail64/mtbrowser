@@ -5,6 +5,5 @@ data class Site(
     val id: String,
     val name: String,
     val url: String,
-    val renameFocusFix: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )
