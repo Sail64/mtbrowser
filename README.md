@@ -117,7 +117,7 @@ app/src/main/java/cn/ptdocs/librechatapp/
 └── web/
     ├── BrowserWebViewClient.kt     # Thin glue: WebView callbacks → domain components
     ├── PageEnhancer.kt             # Page enhancer registry (onPageFinished hooks)
-    ├── enhancers/                  # Cookie flush / rename focus fix / server cert check
+    ├── enhancers/                  # Cookie flush / server cert check
     ├── AppWebChromeClient.kt       # File chooser callbacks
     ├── DownloadHandler.kt          # Download handling (HTTP / data / blob)
     └── WebViewConfigurator.kt      # WebView security config
