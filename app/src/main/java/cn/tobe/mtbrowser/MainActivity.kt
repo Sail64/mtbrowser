@@ -1,10 +1,12 @@
 package cn.tobe.mtbrowser
 
+import android.os.Build
 import android.os.Bundle
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.FrameLayout
 import android.webkit.WebView
 import android.webkit.CookieManager
@@ -51,6 +53,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnTabs: TextView
     private lateinit var btnFullscreen: ImageButton
     private lateinit var progressBar: ProgressBar
+    private lateinit var btnCloseHome: TextView
     private lateinit var homeView: HomeView
     private lateinit var immersive: ImmersiveScrollHelper
     private lateinit var certSelector: KeyChainCertSelector
@@ -58,6 +61,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tabSwitcher: TabSwitcher
 
     private var inBrowser = false
+    private var homeOverlay = false
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
 
     private val fileChooserLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -85,6 +89,8 @@ class MainActivity : AppCompatActivity() {
         btnTabs = findViewById(R.id.btn_tabs)
         btnFullscreen = findViewById(R.id.btn_fullscreen)
         progressBar = findViewById(R.id.progress_bar)
+        btnCloseHome = findViewById(R.id.btn_close_home)
+        btnCloseHome.setOnClickListener { closeHomeOverlay() }
 
         immersive = ImmersiveScrollHelper(this, listOf(topBar, progressBar, bottomToolbar), thresholdPx = 24)
 
@@ -113,6 +119,7 @@ class MainActivity : AppCompatActivity() {
                 when {
                     immersive.isFullscreen() -> exitFullscreen()
                     inBrowser && tabSwitcher.isVisible() -> tabSwitcher.hide()
+                    inBrowser && homeContainer.visibility == View.VISIBLE -> closeHomeOverlay()
                     inBrowser && currentWebView()?.canGoBack() == true -> currentWebView()?.goBack()
                     inBrowser -> showHome()
                     else -> {
@@ -140,16 +147,33 @@ class MainActivity : AppCompatActivity() {
         homeView.render()
     }
 
-    private fun showHome() {
-        inBrowser = false
+    private fun showHome(overlay: Boolean = false) {
         exitFullscreen()
+        if (overlay) {
+            // 覆盖层模式：从浏览会话进入，会话保持，✕/返回键回原页面
+            inBrowser = true
+            homeOverlay = true
+            btnCloseHome.visibility = View.VISIBLE
+        } else {
+            // 独立模式：应用启动入口，返回键退出应用
+            inBrowser = false
+            homeOverlay = false
+            btnCloseHome.visibility = View.GONE
+        }
         homeContainer.visibility = View.VISIBLE
         browserContainer.visibility = View.GONE
         homeView.render()
     }
 
+    private fun closeHomeOverlay() {
+        homeOverlay = false
+        btnCloseHome.visibility = View.GONE
+        showBrowser(updateHomeList = false)
+    }
+
     private fun showBrowser(updateHomeList: Boolean = true) {
         inBrowser = true
+        homeOverlay = false
         immersive.setEnabled(true)
         homeContainer.visibility = View.GONE
         browserContainer.visibility = View.VISIBLE
@@ -176,9 +200,10 @@ class MainActivity : AppCompatActivity() {
             onAllClosed = { showHome() }
         )
         findViewById<View>(R.id.btn_new_tab).setOnClickListener {
+            // 新标签 → 引导到书签选择：挂载空白页后切主页覆盖层，挑书签或按 ✕ 留在空白页
             attachTab(tabManager.newTab())
-            updateTabsButton()
             tabSwitcher.hide()
+            showHome(overlay = true)
         }
         btnTabs.setOnClickListener { tabSwitcher.toggle() }
         updateTabsButton()
@@ -285,7 +310,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.btn_nav_back).setOnClickListener { currentWebView()?.let { if (it.canGoBack()) it.goBack() } }
         findViewById<TextView>(R.id.btn_nav_forward).setOnClickListener { currentWebView()?.let { if (it.canGoForward()) it.goForward() } }
         findViewById<TextView>(R.id.btn_reload).setOnClickListener { currentWebView()?.reload() }
-        findViewById<TextView>(R.id.btn_nav_home).setOnClickListener { showHome() }
+        findViewById<TextView>(R.id.btn_nav_home).setOnClickListener { showHome(overlay = true) }
         addressBar.setOnClickListener { showAddressInputDialog() }
         btnStar.setOnClickListener { bookmarkCurrentPage() }
         btnFullscreen.setOnClickListener {
@@ -447,6 +472,11 @@ class MainActivity : AppCompatActivity() {
             android.content.res.Configuration.UI_MODE_NIGHT_YES
         window.statusBarColor = if (isDarkTheme) android.graphics.Color.BLACK else android.graphics.Color.WHITE
         window.navigationBarColor = if (isDarkTheme) android.graphics.Color.BLACK else android.graphics.Color.WHITE
+
+        // 挖孔/刘海屏：允许窗口延伸进 cutout 区域，否则全屏时状态栏位置会留一条黑带
+        window.attributes = window.attributes.also {
+            it.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
 
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, true)
         androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).let { controller ->
