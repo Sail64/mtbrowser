@@ -29,6 +29,7 @@ import cn.tobe.mtbrowser.web.AppWebChromeClient
 import cn.tobe.mtbrowser.web.BrowserWebViewClient
 import cn.tobe.mtbrowser.web.DownloadHandler
 import cn.tobe.mtbrowser.web.TabManager
+import cn.tobe.mtbrowser.web.Tab
 import cn.tobe.mtbrowser.web.WebViewConfigurator
 import cn.tobe.mtbrowser.web.enhancers.CookieFlushEnhancer
 import cn.tobe.mtbrowser.web.enhancers.RenameFocusEnhancer
@@ -203,7 +204,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** 把标签的 WebView 挂到 web_slot（插到 FAB 之下），保证 slot 内只有当前标签一个 WebView。 */
-    private fun attachTab(tab: cn.tobe.mtbrowser.web.Tab) {
+    private fun attachTab(tab: Tab) {
         tabManager.select(tab)
         if (tab.webView.parent === webSlot) {
             // 已挂载且是当前标签，无需重挂（避免切标签时闪烁）

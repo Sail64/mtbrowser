@@ -104,6 +104,8 @@ class TabSwitcher(
                 manager.closeOthers(tab)
                 Toast.makeText(activity, "已关闭其他标签", Toast.LENGTH_SHORT).show()
                 render()
+                // 幸存者（含被长按的标签）必须挂载：原当前标签的 WebView 已被销毁
+                manager.current?.let { onSelect(it) }
                 true
             }
         }

@@ -24,7 +24,7 @@ class TabManager(
     private val tabs = mutableListOf<Tab>()
     private var nextId = 1L
 
-    /** 切换/加载时更新最近使用顺序用：tabs[0] 最久未用，tabs.last 最新。 */
+    /** 当前标签；tabs.last 最新，tabs.first 最久未用（LRU 淘汰依据）。 */
     var current: Tab? = null
         private set
 
@@ -42,6 +42,7 @@ class TabManager(
         current = tab
         return tab
     }
+
     fun select(tab: Tab) {
         if (!tabs.contains(tab)) return
         current = tab
