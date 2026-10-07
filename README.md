@@ -1,49 +1,14 @@
-# LibreChatApp
+# mtbrowser
 
-> **Unofficial Client Notice**
->
-> This project started as an **unofficial Android client** for **LibreChat** and has evolved into a
-> **general-purpose mTLS browser**: bookmark-centric, any self-hosted mTLS service (LibreChat,
-> internal admin panels, etc.) can be added and visited. It is **not affiliated with the official
-> LibreChat team**.
-
-## Screenshots
-
-> The screenshots show the **LibreChat web interface**. This app is just a full-screen WebView wrapper
-> with passwordless authentication via mTLS.
-
-![Screenshot 1](screenshots/Screenshot_20260219_182457_cn.ptdocs.librechatapp.jpg)
-![Screenshot 2](screenshots/Screenshot_20260219_182528_cn.ptdocs.librechatapp.jpg)
-
----
-
-## Overview
-
-Why I built this:
-I use LibreChat on my phone often, but there’s no official app. Using a mobile browser comes with a few
-frictions:
-1) You still have to go through a login step, even if the browser remembers your password.
-2) The LibreChat UI looks great, but the browser’s address bar and menus eat up screen space and get in
-   the way of the experience.
-3) My LibreChat instance lives on a private network behind an Nginx reverse proxy with mTLS for extra
-   security. That setup requires the browser to present and cache client certificates (aliases). Only
-   heavyweight browsers like Chrome or Firefox handle this well, and they feel overkill on mobile.
-
-That’s why I built LibreChatApp: a lightweight Android WebView client for a self-hosted LibreChat
-server. As usage grew, I needed to reach other mTLS-protected sites too, so it has evolved into a
-**general-purpose mTLS browser**: bookmark any site or type a URL directly, and every site shares
-mTLS client certificate selection & caching, expiry warnings, and file upload/download.
-
-Design & implementation details: [docs/DESIGN_通用浏览器改造.md](docs/DESIGN_通用浏览器改造.md).
-
----
+> Lightweight general-purpose mTLS browser for Android. Bookmark-centric: any self-hosted
+> service behind mutual TLS (LibreChat, internal admin panels, router consoles, …) can be
+> bookmarked and visited.
 
 ## Features
 
-- **Bookmark home** (native layout, add/edit/delete, empty-state guide; legacy server URL is
-  auto-migrated on first launch)
 - **Multi-tab browsing** (independent WebView per tab, LRU cap of 8, tab overview to switch/close,
   long-press to close others)
+- **Bookmark home** (native layout, add/edit/delete, empty-state guide)
 - **Top address bar** (tab count, auto-prefixes `https://`, reload, one-tap bookmark; http/https
   always open in-app)
 - **Bottom toolbar** (back/forward/home) and **floating fullscreen button** (draggable with
@@ -57,86 +22,71 @@ Design & implementation details: [docs/DESIGN_通用浏览器改造.md](docs/DES
 - **Secure WebView settings** (disallow mixed content, disable third-party cookies)
 - **File upload & download support** (HTTP, data URL, blob URL; saved to system Downloads)
 
----
-
 ## Usage
 
 ### 1. Add a Site
-On first launch, tap **"＋ 添加"** on the bookmark home. Tap ☆ while browsing to bookmark the
-current page. Long-press a bookmark to edit or delete it. A legacy server URL is migrated
-automatically into the first bookmark "LibreChat".
+Tap **"＋ 添加"** on the bookmark home. Tap ☆ in the address bar while browsing to bookmark the
+current page. Long-press a bookmark to edit or delete it.
 
-### 2. Client Certificate (mTLS)
+### 2. Tabs
+Tap ▣ in the top bar to open the tab overview: tap a card to switch, ✕ to close, **"＋ 新建标签"**
+for a new tab, long-press to close the others. Bookmarks and address-bar input load in the
+current tab.
+
+### 3. Client Certificate (mTLS)
 If a site uses mutual TLS, the app prompts you to select a client certificate. The alias is cached
 per site (no cross-site interference), and you'll get expiry warnings (at most once per site daily).
 
-### 3. File Upload & Downloads
-Supports uploading files in chats and downloading exported conversation records.
+### 4. File Upload & Downloads
+Upload files in web pages; downloads (HTTP / data URL / blob URL) are saved to system Downloads.
 
-### 4. Immersive Browsing
-Scrolling down hides the toolbar and status bar; scrolling up or reaching the top restores them.
+### 5. Fullscreen
+Tap the floating button (top-right) for immersive fullscreen (hides address bar, toolbar, status
+and navigation bars); tap again or press back to restore. The button can be dragged anywhere and
+its position is remembered.
 
----
+## Build
 
-## Build & Release
-
-### Debug Build
-```bash
+```
 ./gradlew assembleDebug
 ```
 
-### Generate Keystore
-```bash
-./generate_keystore.sh
-```
+Signing & release build: see `build_release.sh`.
 
-### Build Release
-```bash
-./build_release.sh
-```
-On success, `release.apk` will be generated in the project root.
-
----
-
-## Project Structure
+## Code Structure
 
 ```
-app/src/main/java/cn/ptdocs/librechatapp/
-├── MainActivity.kt                 # Thin controller: home/browser view switch, back key, state
+app/src/main/java/cn/tobe/mtbrowser/
+├── MainActivity.kt                 # Thin controller: home/browser switch, back key, state
 ├── domain/                         # Pure business interfaces & models (no Android deps)
 │   ├── CertificateAdvisor.kt       # Single source of truth for cert evaluation
 │   ├── CertReminderScheduler.kt    # Reminder dedup (once per site per day)
 │   ├── ClientCertSelector.kt       # Client cert selection & caching
+│   ├── ProbeThrottle.kt            # Background probe throttle (once per site per day)
 │   ├── SslTrustPolicy.kt           # SSL trust policy (session exemptions)
 │   ├── NavigationPolicy.kt         # Navigation policy (in-app vs external)
 │   ├── SiteRepository.kt           # Site (bookmark) repository
 │   └── model/                      # Site / CertInfo / CertVerdict etc.
-├── data/                           # SharedPreferences+JSON impl, legacy migration
+├── data/                           # SharedPreferences+JSON implementations
 ├── platform/                       # KeyChain selector, server cert prober
 ├── di/AppGraph.kt                  # Lightweight DI container (composition root)
-├── storage/Prefs.kt                # Global metadata (last_url)
+├── storage/Prefs.kt                # Global metadata (last_url, FAB position)
 ├── ui/
 │   ├── home/                       # Bookmark home, editor dialog
-│   ├── ImmersiveScrollHelper.kt    # Immersive scrolling (toolbar/status bar)
-│   └── TabSwitcher.kt              # Tab overview (switch/close/new)
+│   ├── TabSwitcher.kt              # Tab overview (switch/close/new)
+│   └── ImmersiveScrollHelper.kt    # Immersive scrolling & fullscreen
 └── web/
     ├── BrowserWebViewClient.kt     # Thin glue: WebView callbacks → domain components
+    ├── TabManager.kt               # Tab lifecycle & LRU eviction (one WebView per tab)
     ├── PageEnhancer.kt             # Page enhancer registry (onPageFinished hooks)
     ├── enhancers/                  # Cookie flush / server cert check
     ├── AppWebChromeClient.kt       # File chooser callbacks, tab title sync
-    ├── TabManager.kt               # Tab lifecycle & LRU eviction (one WebView per tab)
     ├── DownloadHandler.kt          # Download handling (HTTP / data / blob)
     └── WebViewConfigurator.kt      # WebView security config
 ```
 
----
-
-## Permissions
-
-- `android.permission.INTERNET`
-
----
+Design & implementation details: [docs/DESIGN.md](docs/DESIGN.md).
 
 ## License
 
-MIT License. See [LICENSE](LICENSE).
+See [LICENSE](LICENSE).

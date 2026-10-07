@@ -97,10 +97,25 @@ class ImmersiveScrollHelper(
         val controller = WindowInsetsControllerCompat(window, window.decorView)
         val hide = immersive || fullscreen
         if (hide) {
-            controller.hide(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
+            // 先放开 fits，再隐藏；behavior 允许全屏中下滑临时呼出系统栏
             WindowCompat.setDecorFitsSystemWindows(window, false)
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            // 兼容回退：部分系统上 WindowInsetsControllerCompat.hide 不生效，直接置经典 flag
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = (
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    or View.SYSTEM_UI_FLAG_FULLSCREEN
+                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                )
         } else {
-            controller.show(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            controller.show(WindowInsetsCompat.Type.systemBars())
             WindowCompat.setDecorFitsSystemWindows(window, true)
         }
     }

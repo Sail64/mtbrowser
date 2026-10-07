@@ -25,5 +25,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "LibreChatApp"
+rootProject.name = "mtbrowser"
 include(":app")
