@@ -297,9 +297,12 @@ class MainActivity : AppCompatActivity() {
                 fabLastRawX = event.rawX
                 fabLastRawY = event.rawY
                 fabDragged = false
+                v.isPressed = true
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
+                // 只跟随主指针，其余手指参与时坐标会突变导致按钮瞬移
+                if (event.pointerCount > 1) return true
                 val dx = event.rawX - fabLastRawX
                 val dy = event.rawY - fabLastRawY
                 if (!fabDragged && (abs(dx) > fabTouchSlop || abs(dy) > fabTouchSlop)) fabDragged = true
@@ -314,6 +317,7 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                v.isPressed = false
                 if (fabDragged) {
                     Prefs.setFabPos(this, lp.leftMargin, lp.topMargin)
                 } else if (event.actionMasked == MotionEvent.ACTION_UP) {

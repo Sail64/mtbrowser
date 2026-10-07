@@ -6,6 +6,8 @@ import android.content.Context
 object Prefs {
     private const val FILE = "mtls_webview"
     private const val KEY_LAST_URL = "last_url"
+    private const val KEY_FAB_X = "fab_x"
+    private const val KEY_FAB_Y = "fab_y"
 
     fun getLastUrl(ctx: Context): String? =
         ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(KEY_LAST_URL, null)
@@ -16,9 +18,6 @@ object Prefs {
             .putString(KEY_LAST_URL, url)
             .apply()
     }
-
-    private const val KEY_FAB_X = "fab_x"
-    private const val KEY_FAB_Y = "fab_y"
 
     /** 全屏浮窗按钮上次的 left/top margin（像素），无记录返回 null。 */
     fun getFabPos(ctx: Context): Pair<Int, Int>? {
