@@ -9,11 +9,11 @@
 - **Multi-tab browsing** (independent WebView per tab, LRU cap of 8, tab overview to switch/close,
   long-press to close others)
 - **Bookmark home** (native layout, add/edit/delete, empty-state guide)
-- **Top address bar** (tab count, auto-prefixes `https://`, reload, one-tap bookmark; http/https
+- **Top bar** (tab count, auto-prefixes `https://`, reload, one-tap bookmark, home; http/https
   always open in-app)
-- **Bottom toolbar** (back/forward/home) and **floating fullscreen button** (draggable with
-  remembered position, true immersive fullscreen)
-- **Immersive scrolling** (scroll down hides toolbar & status bar, scroll up restores)
+- **Floating fullscreen button** (draggable with remembered position; fullscreen hides the app
+  top bar, and the status bar is tinted to the page background so it blends in — icons kept,
+  light/dark adapts to background; no bottom bar at all — system back gesture handles page back)
 - **mTLS client certificate support** (per-site alias cache, expiry warning — at most once per
   site per day)
 - **Controllable SSL error handling** (self-signed/expired certs prompt the user; "proceed anyway"
@@ -74,7 +74,7 @@ app/src/main/java/cn/tobe/mtbrowser/
 ├── ui/
 │   ├── home/                       # Bookmark home, editor dialog
 │   ├── TabSwitcher.kt              # Tab overview (switch/close/new)
-│   └── ImmersiveScrollHelper.kt    # Immersive scrolling & fullscreen
+│   └── ImmersiveController.kt      # Immersive fullscreen (bars + system bars)
 └── web/
     ├── BrowserWebViewClient.kt     # Thin glue: WebView callbacks → domain components
     ├── TabManager.kt               # Tab lifecycle & LRU eviction (one WebView per tab)

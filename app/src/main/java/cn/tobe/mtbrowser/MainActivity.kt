@@ -28,7 +28,7 @@ import cn.tobe.mtbrowser.domain.model.Site
 import cn.tobe.mtbrowser.platform.KeyChainCertSelector
 import cn.tobe.mtbrowser.storage.Prefs
 import kotlin.math.abs
-import cn.tobe.mtbrowser.ui.ImmersiveScrollHelper
+import cn.tobe.mtbrowser.ui.ImmersiveController
 import cn.tobe.mtbrowser.ui.TabSwitcher
 import cn.tobe.mtbrowser.ui.home.HomeView
 import cn.tobe.mtbrowser.ui.home.SiteEditorDialog
@@ -47,7 +47,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var browserContainer: LinearLayout
     private lateinit var webSlot: ViewGroup
     private lateinit var topBar: View
-    private lateinit var bottomToolbar: View
     private lateinit var addressBar: TextView
     private lateinit var btnStar: TextView
     private lateinit var btnTabs: TextView
@@ -55,7 +54,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progressBar: ProgressBar
     private lateinit var btnCloseHome: TextView
     private lateinit var homeView: HomeView
-    private lateinit var immersive: ImmersiveScrollHelper
+    private lateinit var immersive: ImmersiveController
     private lateinit var certSelector: KeyChainCertSelector
     private lateinit var tabManager: TabManager
     private lateinit var tabSwitcher: TabSwitcher
@@ -83,7 +82,6 @@ class MainActivity : AppCompatActivity() {
         browserContainer = findViewById(R.id.browser_container)
         webSlot = findViewById(R.id.web_slot)
         topBar = findViewById(R.id.top_bar)
-        bottomToolbar = findViewById(R.id.bottom_toolbar)
         addressBar = findViewById(R.id.address_bar)
         btnStar = findViewById(R.id.btn_star)
         btnTabs = findViewById(R.id.btn_tabs)
@@ -92,7 +90,7 @@ class MainActivity : AppCompatActivity() {
         btnCloseHome = findViewById(R.id.btn_close_home)
         btnCloseHome.setOnClickListener { closeHomeOverlay() }
 
-        immersive = ImmersiveScrollHelper(this, listOf(topBar, progressBar, bottomToolbar), thresholdPx = 24)
+        immersive = ImmersiveController(listOf(topBar, progressBar))
 
         setupTabs()
         setupHome()
@@ -149,6 +147,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun showHome(overlay: Boolean = false) {
         exitFullscreen()
+        // 离开网页，状态栏恢复主题配色
+        configureStatusBar()
         if (overlay) {
             // 覆盖层模式：从浏览会话进入，会话保持，✕/返回键回原页面
             inBrowser = true
@@ -174,7 +174,6 @@ class MainActivity : AppCompatActivity() {
     private fun showBrowser(updateHomeList: Boolean = true) {
         inBrowser = true
         homeOverlay = false
-        immersive.setEnabled(true)
         homeContainer.visibility = View.GONE
         browserContainer.visibility = View.VISIBLE
         if (updateHomeList) homeView.render()
@@ -212,7 +211,6 @@ class MainActivity : AppCompatActivity() {
     private fun createTabWebView(): WebView {
         val wv = WebView(this)
         WebViewConfigurator.configure(wv)
-        immersive.attach(wv)
         wv.webViewClient = BrowserWebViewClient(
             activity = this,
             selector = certSelector,
@@ -225,7 +223,8 @@ class MainActivity : AppCompatActivity() {
                 CookieFlushEnhancer(),
                 ServerCertCheckEnhancer(AppGraph.certAdvisor, AppGraph.reminderScheduler, AppGraph.probeThrottle)
             ),
-            onUrlChanged = { url -> runOnUiThread { onTabUrlChanged(wv, url) } }
+            onUrlChanged = { url -> runOnUiThread { onTabUrlChanged(wv, url) } },
+            onPageBackground = { css -> onTabBackground(wv, css) }
         )
         wv.webChromeClient = AppWebChromeClient(this, onTitle = { title ->
             onTabTitleChanged(wv, title)
@@ -284,9 +283,36 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateProgressBar(progress: Int) {
         progressBar.progress = progress
-        // 尊重沉浸状态：滚动隐藏/全屏期间不单独顶出进度条
+        // 全屏期间一律不显示；退出全屏时 onBarsVisibilityChanged 会按真实进度重设
         progressBar.visibility =
-            if (progress in 1..99 && !immersive.isBarsHidden()) View.VISIBLE else View.GONE
+            if (progress in 1..99 && !immersive.isFullscreen()) View.VISIBLE else View.GONE
+    }
+
+    private fun onTabBackground(webView: WebView, cssColor: String?) {
+        // 仅当前标签、且不在主页覆盖层（主页应保持主题配色）
+        if (webView !== currentWebView() || homeOverlay) return
+        val color = cssColor?.let { parseCssColor(it) } ?: return
+        // 状态栏/导航栏染成页面背景色，图标明暗按背景亮度自适应
+        window.statusBarColor = color
+        window.navigationBarColor = color
+        val lum = (0.299 * android.graphics.Color.red(color) +
+            0.587 * android.graphics.Color.green(color) +
+            0.114 * android.graphics.Color.blue(color)) / 255.0
+        androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).apply {
+            isAppearanceLightStatusBars = lum > 0.6
+            isAppearanceLightNavigationBars = lum > 0.6
+        }
+    }
+
+    /** 解析 "rgb(255, 255, 255)" / "rgba(...)" 形式的 CSS 颜色。 */
+    private fun parseCssColor(css: String): Int? {
+        val m = Regex("rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)").find(css) ?: return null
+        val (r, g, b) = m.destructured
+        return try {
+            android.graphics.Color.rgb(r.toInt(), g.toInt(), b.toInt())
+        } catch (e: Exception) {
+            null
+        }
     }
 
     /** 当前标签变化后刷新地址栏 / 收藏角标 / 最近 URL。 */
@@ -307,8 +333,6 @@ class MainActivity : AppCompatActivity() {
     // ---------- 浏览视图控件 ----------
 
     private fun setupBrowser() {
-        findViewById<TextView>(R.id.btn_nav_back).setOnClickListener { currentWebView()?.let { if (it.canGoBack()) it.goBack() } }
-        findViewById<TextView>(R.id.btn_nav_forward).setOnClickListener { currentWebView()?.let { if (it.canGoForward()) it.goForward() } }
         findViewById<TextView>(R.id.btn_reload).setOnClickListener { currentWebView()?.reload() }
         findViewById<TextView>(R.id.btn_nav_home).setOnClickListener { showHome(overlay = true) }
         addressBar.setOnClickListener { showAddressInputDialog() }

@@ -31,7 +31,7 @@ ui ──► web ──► platform ──► domain ◄── data
   `HttpsCertProber`（旁路 TLS 探测服务端证书）。
 - **web**：`BrowserWebViewClient`（薄胶水）、`TabManager`（标签生命周期）、
   `PageEnhancer` 注册表、下载/文件选择/WebView 配置。
-- **ui**：书签主页、编辑对话框、`TabSwitcher`、`ImmersiveScrollHelper`。
+- **ui**：书签主页、编辑对话框、`TabSwitcher`、`ImmersiveController`。
 - **di**：`AppGraph` 手写依赖容器，`Application.onCreate` 首行初始化。
 
 ## 3. 多标签
@@ -74,11 +74,13 @@ ui ──► web ──► platform ──► domain ◄── data
 
 ## 7. 沉浸式与全屏
 
-- **滚动联动**：`ImmersiveScrollHelper` 监听每个 WebView 的滚动（100ms 节流），
-  下滚隐藏工具栏与状态栏，上滚/回顶恢复；全屏激活期间滚动联动挂起。
+- **沉浸式全屏**：`ImmersiveController` 由右上角浮动按钮驱动，仅隐藏应用顶部操作栏，
+  **不改动窗口布局与系统栏**——避免在部分 ROM 上 `decorFitsSystemWindows` 切换不可靠的问题
+  （内容顶进状态栏与图标打架、退出恢复不全）。状态栏背景色在页面加载完成时通过 JS 探测
+  `body/html` 的 `background-color` 并染色，图标明暗按背景亮度自适应；回主页恢复主题配色。
 - **浮动全屏按钮**：右上角 34dp，四角扩散/收拢图标；点击切换全屏
-  （隐藏地址栏 + 工具栏 + 状态栏 + 导航栏），可拖动（主指针跟踪、touchSlop 判别、
-  边界钳制），位置持久化；工具栏显隐导致 WebView 区域尺寸变化时重钳入界并同步存档。
+  （隐藏顶部操作栏 + 状态栏 + 导航栏），可拖动（主指针跟踪、touchSlop 判别、
+  边界钳制），位置持久化；操作栏显隐导致 WebView 区域尺寸变化时重钳入界并同步存档。
 - 返回键次序：退出全屏 → 关标签概览 → 网页后退 → 回书签主页。
 
 ## 8. 已知取舍

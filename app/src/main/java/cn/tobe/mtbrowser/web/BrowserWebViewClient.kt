@@ -40,7 +40,8 @@ class BrowserWebViewClient(
     private val navigationPolicy: NavigationPolicy,
     private val sites: cn.tobe.mtbrowser.domain.SiteRepository,
     private val enhancers: List<PageEnhancer>,
-    private val onUrlChanged: (String) -> Unit
+    private val onUrlChanged: (String) -> Unit,
+    private val onPageBackground: (String?) -> Unit = {}
 ) : WebViewClient() {
 
     companion object {
@@ -236,6 +237,30 @@ class BrowserWebViewClient(
             }
         }
         onUrlChanged(url)
+        probePageBackground(view)
+    }
+
+    /**
+     * 探测页面背景色（body 优先，html 兜底），供状态栏染色与页面视觉一致。
+     * 结果形如 "rgb(255, 255, 255)"（JSON 字符串包裹），无法解析时回调 null。
+     */
+    private fun probePageBackground(view: WebView) {
+        val js = """
+            (function() {
+                try {
+                    var b = getComputedStyle(document.body);
+                    var h = getComputedStyle(document.documentElement);
+                    function solid(c) { return c && c !== 'rgba(0, 0, 0, 0)' && c !== 'transparent'; }
+                    if (solid(b.backgroundColor)) return b.backgroundColor;
+                    if (solid(h.backgroundColor)) return h.backgroundColor;
+                } catch (e) {}
+                return '';
+            })();
+        """.trimIndent()
+        view.evaluateJavascript(js) { result ->
+            val value = result?.trim()?.removeSurrounding("\"")
+            onPageBackground(value?.takeIf { it.isNotEmpty() })
+        }
     }
 
     // KeyChain 访问禁止在主线程进行，集中在此供后台线程调用

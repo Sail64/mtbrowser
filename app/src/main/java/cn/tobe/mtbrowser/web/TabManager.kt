@@ -9,7 +9,10 @@ class Tab(
     val webView: WebView,
     var title: String,
     var url: String
-)
+) {
+    /** 最近使用时间戳：仅供 LRU 淘汰比较，不影响列表展示顺序。 */
+    var lastUsedAt: Long = System.currentTimeMillis()
+}
 
 /**
  * 标签管理器：每个标签一个独立 WebView（真池，非 save/restore 假切换），
@@ -24,16 +27,19 @@ class TabManager(
     private val tabs = mutableListOf<Tab>()
     private var nextId = 1L
 
-    /** 当前标签；tabs.last 最新，tabs.first 最久未用（LRU 淘汰依据）。 */
+    /**
+     * 当前标签；tabs 列表保持打开（创建）顺序——概览层展示顺序稳定，
+     * LRU 淘汰依据 Tab.lastUsedAt 而非列表位置。
+     */
     var current: Tab? = null
         private set
 
     fun tabs(): List<Tab> = tabs.toList()
 
     fun newTab(url: String? = null): Tab {
-        // 超 LRU 上限时先淘汰最久未用的（current 排除）
+        // 超上限时淘汰最近最少使用的（current 排除）
         while (tabs.size >= maxTabs) {
-            val victim = tabs.firstOrNull { it !== current } ?: break
+            val victim = tabs.filter { it !== current }.minByOrNull { it.lastUsedAt } ?: break
             closeTab(victim)
         }
         val tab = Tab(nextId++, createWebView(), "", url.orEmpty())
@@ -46,13 +52,7 @@ class TabManager(
     fun select(tab: Tab) {
         if (!tabs.contains(tab)) return
         current = tab
-        touch(tab)
-    }
-
-    /** 最近使用排序：tabs.last 最新，tabs.first 最久未用（LRU 淘汰依据）。 */
-    private fun touch(tab: Tab) {
-        tabs.remove(tab)
-        tabs.add(tab)
+        tab.lastUsedAt = System.currentTimeMillis()
     }
 
     /**
@@ -75,6 +75,7 @@ class TabManager(
     fun closeOthers(tab: Tab) {
         tabs.toList().forEach { if (it !== tab) closeTab(it) }
         current = tab
+        tab.lastUsedAt = System.currentTimeMillis()
     }
 
     fun currentWebView(): WebView? = current?.webView
