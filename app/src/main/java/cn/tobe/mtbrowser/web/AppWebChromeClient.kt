@@ -8,7 +8,8 @@ import cn.tobe.mtbrowser.MainActivity
 
 class AppWebChromeClient(
     private val activity: MainActivity,
-    private val onTitle: (String) -> Unit = {}
+    private val onTitle: (String) -> Unit = {},
+    private val onProgress: (Int) -> Unit = {}
 ) : WebChromeClient() {
 
     override fun onShowFileChooser(
@@ -21,5 +22,9 @@ class AppWebChromeClient(
 
     override fun onReceivedTitle(view: WebView?, title: String?) {
         onTitle(title.orEmpty())
+    }
+
+    override fun onProgressChanged(view: WebView?, newProgress: Int) {
+        onProgress(newProgress)
     }
 }

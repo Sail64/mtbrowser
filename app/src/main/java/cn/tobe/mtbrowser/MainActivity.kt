@@ -14,6 +14,7 @@ import android.net.Uri
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -49,6 +50,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnStar: TextView
     private lateinit var btnTabs: TextView
     private lateinit var btnFullscreen: ImageButton
+    private lateinit var progressBar: ProgressBar
     private lateinit var homeView: HomeView
     private lateinit var immersive: ImmersiveScrollHelper
     private lateinit var certSelector: KeyChainCertSelector
@@ -82,6 +84,7 @@ class MainActivity : AppCompatActivity() {
         btnStar = findViewById(R.id.btn_star)
         btnTabs = findViewById(R.id.btn_tabs)
         btnFullscreen = findViewById(R.id.btn_fullscreen)
+        progressBar = findViewById(R.id.progress_bar)
 
         immersive = ImmersiveScrollHelper(this, listOf(topBar, bottomToolbar), thresholdPx = 24)
 
@@ -199,9 +202,11 @@ class MainActivity : AppCompatActivity() {
             ),
             onUrlChanged = { url -> runOnUiThread { onTabUrlChanged(wv, url) } }
         )
-        wv.webChromeClient = AppWebChromeClient(this) { title ->
+        wv.webChromeClient = AppWebChromeClient(this, onTitle = { title ->
             onTabTitleChanged(wv, title)
-        }
+        }, onProgress = { progress ->
+            onTabProgress(wv, progress)
+        })
         DownloadHandler(this).setup(wv)
         return wv
     }
@@ -224,6 +229,7 @@ class MainActivity : AppCompatActivity() {
         )
         updateTabsButton()
         onCurrentTabUiChanged()
+        updateProgressBar(tab.webView.progress)
     }
 
     private fun ensureCurrentTab(): WebView {
@@ -244,6 +250,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun onTabTitleChanged(webView: WebView, title: String) {
         tabManager.tabs().firstOrNull { it.webView === webView }?.title = title
+    }
+
+    /** 进度回调只对当前标签生效，切换标签时按该标签自己的进度刷新。 */
+    private fun onTabProgress(webView: WebView, progress: Int) {
+        if (webView === currentWebView()) updateProgressBar(progress)
+    }
+
+    private fun updateProgressBar(progress: Int) {
+        progressBar.progress = progress
+        progressBar.visibility = if (progress in 1..99) View.VISIBLE else View.GONE
     }
 
     /** 当前标签变化后刷新地址栏 / 收藏角标 / 最近 URL。 */
