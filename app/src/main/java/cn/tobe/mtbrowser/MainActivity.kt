@@ -19,6 +19,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -182,9 +183,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun openSite(site: Site) {
-        Prefs.setLastUrl(this, site.url)
         showBrowser()
+        loadIfAllowed(site.url) ?: return
+        Prefs.setLastUrl(this, site.url)
         ensureCurrentTab().loadUrl(site.url)
+    }
+
+    /** 前置白名单检查：显式 loadUrl 在导航提交前才会被 client 兜底拦截，
+     *  恶意域名会先收到请求；UI 入口必须先在此拦截，不发起任何网络。 */
+    private fun loadIfAllowed(url: String): String? {
+        if (AppGraph.domainWhitelist.allows(url)) return url
+        Toast.makeText(this, "该域名不在允许访问的白名单内", Toast.LENGTH_LONG).show()
+        return null
     }
 
     // ---------- 标签 ----------
@@ -267,6 +277,8 @@ class MainActivity : AppCompatActivity() {
     private fun currentWebView(): WebView? = tabManager.currentWebView()
 
     private fun onTabUrlChanged(webView: WebView, url: String) {
+        // 拦截页（data:）不更新标签与 UI：标签保留被拦原 URL，地址栏维持原样
+        if (url.startsWith("data:")) return
         tabManager.tabs().firstOrNull { it.webView === webView }?.let { tab ->
             tab.url = url
             tab.title = webView.title.orEmpty()
@@ -320,9 +332,10 @@ class MainActivity : AppCompatActivity() {
     /** 当前标签变化后刷新地址栏 / 收藏角标 / 最近 URL。 */
     private fun onCurrentTabUiChanged(url: String? = null) {
         val webView = currentWebView() ?: return
-        val currentUrl = url ?: webView.url.orEmpty()
-        // 拦截页等 data: 地址不进地址栏、不写最近 URL
-        if (currentUrl.startsWith("data:")) return
+        // 拦截页（data:）时回退展示标签记录的被拦原 URL
+        val currentUrl = (url ?: webView.url.orEmpty())
+            .takeUnless { it.startsWith("data:") }
+            ?: tabManager.current?.url.orEmpty()
         if (currentUrl.isNotEmpty()) Prefs.setLastUrl(this, currentUrl)
         addressBar.text = currentUrl.ifEmpty { "输入网址或回到主页" }
         val bookmarked = AppGraph.siteRepository.findByUrl(currentUrl) != null
@@ -449,7 +462,7 @@ class MainActivity : AppCompatActivity() {
             .setView(input)
             .setPositiveButton("打开") { _, _ ->
                 val url = SiteEditorDialog.normalizeUrl(input.text.toString())
-                if (url.isNotEmpty()) {
+                if (url.isNotEmpty() && loadIfAllowed(url) != null) {
                     ensureCurrentTab().loadUrl(url)
                 }
             }
@@ -459,6 +472,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun bookmarkCurrentPage() {
         val url = currentWebView()?.url ?: return
+        // 拦截页不可收藏
+        if (url.startsWith("data:")) return
         val existing = AppGraph.siteRepository.findByUrl(url)
         if (existing != null) {
             SiteEditorDialog.show(this, AppGraph.siteRepository, existing) { onCurrentTabUiChanged(url) }

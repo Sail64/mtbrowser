@@ -13,7 +13,7 @@ object WebViewConfigurator {
             javaScriptEnabled = true
             domStorageEnabled = true
             databaseEnabled = true
-            allowContentAccess = true
+            allowContentAccess = false
             saveFormData = false
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             setSupportMultipleWindows(false)
