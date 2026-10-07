@@ -38,8 +38,10 @@ mTLS 客户端证书选择与缓存、证书过期提醒、文件上传下载等
 ## 功能特性
 
 - **书签主页**（原生布局，添加/编辑/删除，空态引导；首次启动自动迁移旧版服务器地址）
-- **地址栏直接访问**（输入 URL 自动补 `https://`；http/https 一律应用内加载）
-- **底部工具栏**（返回/前进/主页/刷新/一键收藏）与**沉浸式滚动**（下滚隐藏工具栏与状态栏，上滚恢复）
+- **多标签浏览**（每标签独立 WebView，LRU 上限 8 个，标签概览层切换/关闭，长按关闭其他）
+- **顶部地址栏**（标签数、输入 URL 自动补 `https://`、刷新、一键收藏；http/https 一律应用内加载）
+- **底部工具栏**（返回/前进/主页）与**浮动全屏按钮**（右上角可拖动并记忆位置，真沉浸式全屏）
+- **沉浸式滚动**（下滚隐藏工具栏与状态栏，上滚恢复）
 - **mTLS 客户端证书支持**（按站点缓存 alias、证书过期提醒——同一站点每天最多提醒一次）
 - **SSL 错误可控放行**（自签/过期证书弹窗提示，可选择「仍要继续」，豁免仅本次运行内有效）
 - **证书失效自动清理**（主框架 400 且该站点缓存过证书时，自动清理并重新选择）
@@ -105,12 +107,14 @@ app/src/main/java/cn/ptdocs/librechatapp/
 ├── storage/Prefs.kt                # 全局元数据（last_url）
 ├── ui/
 │   ├── home/                       # 书签主页、编辑对话框
-│   └── ImmersiveScrollHelper.kt    # 沉浸式滚动（工具栏/状态栏联动）
+│   ├── ImmersiveScrollHelper.kt    # 沉浸式滚动（工具栏/状态栏联动）
+│   └── TabSwitcher.kt              # 标签概览层（切换/关闭/新建）
 └── web/
     ├── BrowserWebViewClient.kt     # 薄胶水：WebView 回调 → domain 组件
     ├── PageEnhancer.kt             # 页面增强器注册表（onPageFinished 钩子）
     ├── enhancers/                  # Cookie flush / 键盘修复 / 服务端证书检查
-    ├── AppWebChromeClient.kt       # 文件选择回调
+    ├── AppWebChromeClient.kt       # 文件选择回调、标签标题同步
+    ├── TabManager.kt               # 标签生命周期与 LRU 淘汰（每标签独立 WebView）
     ├── DownloadHandler.kt          # 下载处理（HTTP / data / blob）
     └── WebViewConfigurator.kt      # WebView 安全配置
 ```

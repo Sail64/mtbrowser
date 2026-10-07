@@ -42,9 +42,13 @@ Design & implementation details: [docs/DESIGN_通用浏览器改造.md](docs/DES
 
 - **Bookmark home** (native layout, add/edit/delete, empty-state guide; legacy server URL is
   auto-migrated on first launch)
-- **Address bar** (auto-prefixes `https://`; http/https always open in-app)
-- **Bottom toolbar** (back/forward/home/reload/one-tap bookmark) and **immersive scrolling**
-  (scroll down hides toolbar & status bar, scroll up restores)
+- **Multi-tab browsing** (independent WebView per tab, LRU cap of 8, tab overview to switch/close,
+  long-press to close others)
+- **Top address bar** (tab count, auto-prefixes `https://`, reload, one-tap bookmark; http/https
+  always open in-app)
+- **Bottom toolbar** (back/forward/home) and **floating fullscreen button** (draggable with
+  remembered position, true immersive fullscreen)
+- **Immersive scrolling** (scroll down hides toolbar & status bar, scroll up restores)
 - **mTLS client certificate support** (per-site alias cache, expiry warning — at most once per
   site per day)
 - **Controllable SSL error handling** (self-signed/expired certs prompt the user; "proceed anyway"
@@ -113,12 +117,14 @@ app/src/main/java/cn/ptdocs/librechatapp/
 ├── storage/Prefs.kt                # Global metadata (last_url)
 ├── ui/
 │   ├── home/                       # Bookmark home, editor dialog
-│   └── ImmersiveScrollHelper.kt    # Immersive scrolling (toolbar/status bar)
+│   ├── ImmersiveScrollHelper.kt    # Immersive scrolling (toolbar/status bar)
+│   └── TabSwitcher.kt              # Tab overview (switch/close/new)
 └── web/
     ├── BrowserWebViewClient.kt     # Thin glue: WebView callbacks → domain components
     ├── PageEnhancer.kt             # Page enhancer registry (onPageFinished hooks)
     ├── enhancers/                  # Cookie flush / server cert check
-    ├── AppWebChromeClient.kt       # File chooser callbacks
+    ├── AppWebChromeClient.kt       # File chooser callbacks, tab title sync
+    ├── TabManager.kt               # Tab lifecycle & LRU eviction (one WebView per tab)
     ├── DownloadHandler.kt          # Download handling (HTTP / data / blob)
     └── WebViewConfigurator.kt      # WebView security config
 ```

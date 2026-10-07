@@ -27,6 +27,9 @@ class ImmersiveScrollHelper(
 
     private val throttleMs = 100L
 
+    /** 工具栏隐藏/恢复导致 WebView 区域尺寸变化后通知（如浮动按钮重入界）。 */
+    var onBarsVisibilityChanged: (() -> Unit)? = null
+
     /** 每个标签的 WebView 创建后调用一次。 */
     fun attach(webView: WebView) {
         webView.setOnScrollChangeListener { _, _, scrollY, _, _ ->
@@ -78,7 +81,15 @@ class ImmersiveScrollHelper(
 
     private fun applyBars() {
         val hide = immersive || fullscreen
-        bars.forEach { it.visibility = if (hide) View.GONE else View.VISIBLE }
+        val target = if (hide) View.GONE else View.VISIBLE
+        var changed = false
+        bars.forEach {
+            if (it.visibility != target) {
+                it.visibility = target
+                changed = true
+            }
+        }
+        if (changed) onBarsVisibilityChanged?.invoke()
     }
 
     private fun applySystemBars() {

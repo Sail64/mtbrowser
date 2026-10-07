@@ -288,6 +288,10 @@ class MainActivity : AppCompatActivity() {
         btnFullscreen.setOnTouchListener { v, event -> onFabTouch(v, event) }
         // 布局完成后恢复上次位置（webSlot 尚未布局/不可见时跳过，showBrowser 会再试）
         btnFullscreen.post { restoreFabPosition() }
+        // 工具栏隐藏/恢复会改变 webSlot 尺寸，FAB 可能落到可视区外，重钳并存档
+        immersive.onBarsVisibilityChanged = {
+            btnFullscreen.post { snapFabIntoBounds() }
+        }
     }
 
     private fun onFabTouch(v: View, event: MotionEvent): Boolean {
@@ -344,6 +348,18 @@ class MainActivity : AppCompatActivity() {
         lp.topMargin = pos.second
         clampFab(lp)
         btnFullscreen.layoutParams = lp
+    }
+
+    /** bars 显隐导致 webSlot 尺寸变化后，把 FAB 钳回可视范围并同步存档。 */
+    private fun snapFabIntoBounds() {
+        if (btnFullscreen.width <= 0) return
+        val lp = btnFullscreen.layoutParams as FrameLayout.LayoutParams
+        val before = lp.leftMargin to lp.topMargin
+        clampFab(lp)
+        if (before != lp.leftMargin to lp.topMargin) {
+            btnFullscreen.layoutParams = lp
+            Prefs.setFabPos(this, lp.leftMargin, lp.topMargin)
+        }
     }
 
     private fun exitFullscreen() {
