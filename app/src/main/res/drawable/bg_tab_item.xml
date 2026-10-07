@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 未选中标签条目：无任何高亮（保留文件避免引用断裂，可直接删除） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle" />

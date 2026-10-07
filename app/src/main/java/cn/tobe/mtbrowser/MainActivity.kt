@@ -15,6 +15,7 @@ import android.webkit.WebChromeClient
 import android.net.Uri
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -48,7 +49,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webSlot: ViewGroup
     private lateinit var topBar: View
     private lateinit var addressBar: TextView
-    private lateinit var btnStar: TextView
+    private lateinit var btnStar: ImageView
     private lateinit var btnTabs: TextView
     private lateinit var btnFullscreen: ImageButton
     private lateinit var progressBar: ProgressBar
@@ -322,19 +323,19 @@ class MainActivity : AppCompatActivity() {
         if (currentUrl.isNotEmpty()) Prefs.setLastUrl(this, currentUrl)
         addressBar.text = currentUrl.ifEmpty { "输入网址或回到主页" }
         val bookmarked = AppGraph.siteRepository.findByUrl(currentUrl) != null
-        btnStar.text = if (bookmarked) "★" else "☆"
+        btnStar.setImageResource(if (bookmarked) R.drawable.ic_star else R.drawable.ic_star_border)
         updateTabsButton()
     }
 
     private fun updateTabsButton() {
-        btnTabs.text = "▣ ${tabManager.tabs().size}"
+        btnTabs.text = tabManager.tabs().size.toString()
     }
 
     // ---------- 浏览视图控件 ----------
 
     private fun setupBrowser() {
-        findViewById<TextView>(R.id.btn_reload).setOnClickListener { currentWebView()?.reload() }
-        findViewById<TextView>(R.id.btn_nav_home).setOnClickListener { showHome(overlay = true) }
+        findViewById<ImageView>(R.id.btn_reload).setOnClickListener { currentWebView()?.reload() }
+        findViewById<ImageView>(R.id.btn_nav_home).setOnClickListener { showHome(overlay = true) }
         addressBar.setOnClickListener { showAddressInputDialog() }
         btnStar.setOnClickListener { bookmarkCurrentPage() }
         btnFullscreen.setOnClickListener {
