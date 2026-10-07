@@ -1,0 +1,367 @@
+package cn.tobe.mtbrowser
+
+import android.os.Bundle
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebView
+import android.webkit.CookieManager
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
+import android.net.Uri
+import android.widget.EditText
+import android.widget.ImageButton
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
+import cn.tobe.mtbrowser.data.PrefSiteRepository
+import cn.tobe.mtbrowser.di.AppGraph
+import cn.tobe.mtbrowser.domain.model.Site
+import cn.tobe.mtbrowser.platform.KeyChainCertSelector
+import cn.tobe.mtbrowser.storage.Prefs
+import cn.tobe.mtbrowser.ui.ImmersiveScrollHelper
+import cn.tobe.mtbrowser.ui.TabSwitcher
+import cn.tobe.mtbrowser.ui.home.HomeView
+import cn.tobe.mtbrowser.ui.home.SiteEditorDialog
+import cn.tobe.mtbrowser.web.AppWebChromeClient
+import cn.tobe.mtbrowser.web.BrowserWebViewClient
+import cn.tobe.mtbrowser.web.DownloadHandler
+import cn.tobe.mtbrowser.web.TabManager
+import cn.tobe.mtbrowser.web.WebViewConfigurator
+import cn.tobe.mtbrowser.web.enhancers.CookieFlushEnhancer
+import cn.tobe.mtbrowser.web.enhancers.RenameFocusEnhancer
+import cn.tobe.mtbrowser.web.enhancers.ServerCertCheckEnhancer
+
+class MainActivity : AppCompatActivity() {
+
+    private lateinit var homeContainer: View
+    private lateinit var browserContainer: LinearLayout
+    private lateinit var webSlot: ViewGroup
+    private lateinit var topBar: View
+    private lateinit var bottomToolbar: View
+    private lateinit var addressBar: TextView
+    private lateinit var btnStar: TextView
+    private lateinit var btnTabs: TextView
+    private lateinit var btnFullscreen: ImageButton
+    private lateinit var homeView: HomeView
+    private lateinit var immersive: ImmersiveScrollHelper
+    private lateinit var certSelector: KeyChainCertSelector
+    private lateinit var tabManager: TabManager
+    private lateinit var tabSwitcher: TabSwitcher
+
+    private var inBrowser = false
+    private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
+
+    private val fileChooserLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (fileUploadCallback == null) return@registerForActivityResult
+        val results: Array<Uri>? = WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
+        fileUploadCallback?.onReceiveValue(results)
+        fileUploadCallback = null
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        AppGraph.init(this)
+        certSelector = KeyChainCertSelector(this, AppGraph.clientCertStore)
+
+        configureStatusBar()
+        setContentView(R.layout.activity_main)
+
+        homeContainer = findViewById(R.id.home_container)
+        browserContainer = findViewById(R.id.browser_container)
+        webSlot = findViewById(R.id.web_slot)
+        topBar = findViewById(R.id.top_bar)
+        bottomToolbar = findViewById(R.id.bottom_toolbar)
+        addressBar = findViewById(R.id.address_bar)
+        btnStar = findViewById(R.id.btn_star)
+        btnTabs = findViewById(R.id.btn_tabs)
+        btnFullscreen = findViewById(R.id.btn_fullscreen)
+
+        immersive = ImmersiveScrollHelper(this, listOf(topBar, bottomToolbar), thresholdPx = 24)
+
+        setupTabs()
+        setupHome()
+        setupBrowser()
+
+        // 恢复：优先 restoreState（转屏/进程回收），否则打开上次访问的站点
+        val restoredView = savedInstanceState?.getBoolean(KEY_IN_BROWSER, false) ?: false
+        val restored = (savedInstanceState?.getBundle(KEY_WEBVIEW_STATE)?.let {
+            val tab = tabManager.newTab()
+            tab.webView.restoreState(it)
+        } != null) && restoredView
+        if (restored) {
+            tabManager.current?.let { attachTab(it) }
+            showBrowser(updateHomeList = false)
+        } else {
+            Prefs.getLastUrl(this)
+                ?.let { PrefSiteRepository.hostOf(it) }
+                ?.let { AppGraph.siteRepository.byHost(it) }
+                ?.let { openSite(it) }
+        }
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                when {
+                    immersive.isFullscreen() -> exitFullscreen()
+                    inBrowser && tabSwitcher.isVisible() -> tabSwitcher.hide()
+                    inBrowser && currentWebView()?.canGoBack() == true -> currentWebView()?.goBack()
+                    inBrowser -> showHome()
+                    else -> {
+                        isEnabled = false
+                        onBackPressedDispatcher.onBackPressed()
+                    }
+                }
+            }
+        })
+    }
+
+    // ---------- 主页 ----------
+
+    private fun setupHome() {
+        homeView = HomeView(
+            activity = this,
+            repository = AppGraph.siteRepository,
+            container = findViewById(R.id.site_list),
+            emptyHint = findViewById(R.id.empty_hint)
+        ) { site -> openSite(site) }
+
+        findViewById<TextView>(R.id.btn_add_site).setOnClickListener {
+            SiteEditorDialog.show(this, AppGraph.siteRepository, null) { homeView.render() }
+        }
+        homeView.render()
+    }
+
+    private fun showHome() {
+        inBrowser = false
+        exitFullscreen()
+        homeContainer.visibility = View.VISIBLE
+        browserContainer.visibility = View.GONE
+        homeView.render()
+    }
+
+    private fun showBrowser(updateHomeList: Boolean = true) {
+        inBrowser = true
+        immersive.setEnabled(true)
+        homeContainer.visibility = View.GONE
+        browserContainer.visibility = View.VISIBLE
+        if (updateHomeList) homeView.render()
+    }
+
+    fun openSite(site: Site) {
+        Prefs.setLastUrl(this, site.url)
+        showBrowser()
+        ensureCurrentTab().loadUrl(site.url)
+    }
+
+    // ---------- 标签 ----------
+
+    private fun setupTabs() {
+        tabManager = TabManager(createWebView = { createTabWebView() })
+        tabSwitcher = TabSwitcher(
+            activity = this,
+            root = findViewById(R.id.tab_switcher),
+            listContainer = findViewById(R.id.tab_list),
+            manager = tabManager,
+            onSelect = { attachTab(it) },
+            onNewTab = {
+                attachTab(tabManager.newTab())
+                updateTabsButton()
+            },
+            onAllClosed = { showHome() }
+        )
+        findViewById<View>(R.id.btn_new_tab).setOnClickListener {
+            attachTab(tabManager.newTab())
+            updateTabsButton()
+            tabSwitcher.hide()
+        }
+        btnTabs.setOnClickListener { tabSwitcher.toggle() }
+        updateTabsButton()
+    }
+
+    private fun createTabWebView(): WebView {
+        val wv = WebView(this)
+        WebViewConfigurator.configure(wv)
+        immersive.attach(wv)
+        wv.webViewClient = BrowserWebViewClient(
+            activity = this,
+            selector = certSelector,
+            advisor = AppGraph.certAdvisor,
+            reminders = AppGraph.reminderScheduler,
+            sslTrustPolicy = AppGraph.sslTrustPolicy,
+            navigationPolicy = AppGraph.navigationPolicy,
+            sites = AppGraph.siteRepository,
+            enhancers = listOf(
+                CookieFlushEnhancer(),
+                RenameFocusEnhancer(),
+                ServerCertCheckEnhancer(AppGraph.certAdvisor, AppGraph.reminderScheduler, AppGraph.probeThrottle)
+            ),
+            onUrlChanged = { url -> runOnUiThread { onTabUrlChanged(wv, url) } }
+        )
+        wv.webChromeClient = AppWebChromeClient(this)
+        DownloadHandler(this).setup(wv)
+        return wv
+    }
+
+    /** 把标签的 WebView 挂到 web_slot（插到 FAB 之下），保证 slot 内只有当前标签一个 WebView。 */
+    private fun attachTab(tab: cn.tobe.mtbrowser.web.Tab) {
+        tabManager.select(tab)
+        for (i in webSlot.childCount - 1 downTo 0) {
+            if (webSlot.getChildAt(i) is WebView) webSlot.removeViewAt(i)
+        }
+        webSlot.addView(
+            tab.webView, 0,
+            ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        )
+        updateTabsButton()
+        onCurrentTabUiChanged()
+    }
+
+    private fun ensureCurrentTab(): WebView {
+        val tab = tabManager.current ?: tabManager.newTab().also { attachTab(it) }
+        if (tab.webView.parent !== webSlot) attachTab(tab)
+        return tab.webView
+    }
+
+    private fun currentWebView(): WebView? = tabManager.currentWebView()
+
+    private fun onTabUrlChanged(webView: WebView, url: String) {
+        tabManager.tabs().firstOrNull { it.webView === webView }?.let { tab ->
+            tab.url = url
+            tab.title = webView.title.orEmpty()
+        }
+        if (webView === currentWebView()) onCurrentTabUiChanged(url)
+    }
+
+    /** 当前标签变化后刷新地址栏 / 收藏角标 / 最近 URL。 */
+    private fun onCurrentTabUiChanged(url: String? = null) {
+        val webView = currentWebView() ?: return
+        val currentUrl = url ?: webView.url.orEmpty()
+        if (currentUrl.isNotEmpty()) Prefs.setLastUrl(this, currentUrl)
+        addressBar.text = currentUrl.ifEmpty { "输入网址或回到主页" }
+        val bookmarked = AppGraph.siteRepository.findByUrl(currentUrl) != null
+        btnStar.text = if (bookmarked) "★" else "☆"
+        updateTabsButton()
+    }
+
+    private fun updateTabsButton() {
+        btnTabs.text = "▣ ${tabManager.tabs().size}"
+    }
+
+    // ---------- 浏览视图控件 ----------
+
+    private fun setupBrowser() {
+        findViewById<TextView>(R.id.btn_nav_back).setOnClickListener { currentWebView()?.let { if (it.canGoBack()) it.goBack() } }
+        findViewById<TextView>(R.id.btn_nav_forward).setOnClickListener { currentWebView()?.let { if (it.canGoForward()) it.goForward() } }
+        findViewById<TextView>(R.id.btn_reload).setOnClickListener { currentWebView()?.reload() }
+        findViewById<TextView>(R.id.btn_nav_home).setOnClickListener { showHome() }
+        addressBar.setOnClickListener { showAddressInputDialog() }
+        btnStar.setOnClickListener { bookmarkCurrentPage() }
+        btnFullscreen.setOnClickListener {
+            val fullscreen = immersive.toggleFullscreen()
+            btnFullscreen.setImageResource(if (fullscreen) R.drawable.ic_collapse else R.drawable.ic_expand)
+        }
+    }
+
+    private fun exitFullscreen() {
+        if (immersive.isFullscreen()) {
+            immersive.toggleFullscreen()
+        }
+        btnFullscreen.setImageResource(R.drawable.ic_expand)
+    }
+
+    private fun showAddressInputDialog() {
+        val input = EditText(this)
+        input.setText(addressBar.text.toString())
+        AlertDialog.Builder(this)
+            .setTitle("打开网址")
+            .setView(input)
+            .setPositiveButton("打开") { _, _ ->
+                val url = SiteEditorDialog.normalizeUrl(input.text.toString())
+                if (url.isNotEmpty()) {
+                    ensureCurrentTab().loadUrl(url)
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun bookmarkCurrentPage() {
+        val url = currentWebView()?.url ?: return
+        val existing = AppGraph.siteRepository.findByUrl(url)
+        if (existing != null) {
+            SiteEditorDialog.show(this, AppGraph.siteRepository, existing) { onCurrentTabUiChanged(url) }
+        } else {
+            SiteEditorDialog.show(
+                this, AppGraph.siteRepository, null,
+                onSaved = { onCurrentTabUiChanged(url) },
+                prefillName = currentWebView()?.title.orEmpty(),
+                prefillUrl = url
+            )
+        }
+    }
+
+    // ---------- 文件上传 ----------
+
+    fun showFileChooser(
+        filePathCallback: ValueCallback<Array<Uri>>?,
+        fileChooserParams: WebChromeClient.FileChooserParams?
+    ): Boolean {
+        if (fileUploadCallback != null) {
+            fileUploadCallback?.onReceiveValue(null)
+            fileUploadCallback = null
+        }
+        fileUploadCallback = filePathCallback
+        val intent = fileChooserParams?.createIntent() ?: return false
+        return try {
+            fileChooserLauncher.launch(intent)
+            true
+        } catch (e: Exception) {
+            fileUploadCallback = null
+            false
+        }
+    }
+
+    // ---------- 状态栏 ----------
+
+    private fun configureStatusBar() {
+        val isDarkTheme = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        window.statusBarColor = if (isDarkTheme) android.graphics.Color.BLACK else android.graphics.Color.WHITE
+        window.navigationBarColor = if (isDarkTheme) android.graphics.Color.BLACK else android.graphics.Color.WHITE
+
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, true)
+        androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).let { controller ->
+            controller.isAppearanceLightStatusBars = !isDarkTheme
+            controller.isAppearanceLightNavigationBars = !isDarkTheme
+        }
+    }
+
+    // ---------- 生命周期 ----------
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(KEY_IN_BROWSER, inBrowser)
+        if (inBrowser) {
+            val bundle = Bundle()
+            currentWebView()?.saveState(bundle)
+            outState.putBundle(KEY_WEBVIEW_STATE, bundle)
+        }
+    }
+
+    override fun onDestroy() {
+        tabManager.tabs().forEach { it.webView.destroy() }
+        super.onDestroy()
+    }
+
+    override fun onPause() {
+        CookieManager.getInstance().flush()
+        super.onPause()
+    }
+
+    companion object {
+        private const val KEY_WEBVIEW_STATE = "webview_state"
+        private const val KEY_IN_BROWSER = "in_browser"
+    }
+}
