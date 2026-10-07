@@ -224,6 +224,7 @@ class MainActivity : AppCompatActivity() {
                 CookieFlushEnhancer(),
                 ServerCertCheckEnhancer(AppGraph.certAdvisor, AppGraph.reminderScheduler, AppGraph.probeThrottle)
             ),
+            whitelist = AppGraph.domainWhitelist,
             onUrlChanged = { url -> runOnUiThread { onTabUrlChanged(wv, url) } },
             onPageBackground = { css -> onTabBackground(wv, css) }
         )
@@ -320,6 +321,8 @@ class MainActivity : AppCompatActivity() {
     private fun onCurrentTabUiChanged(url: String? = null) {
         val webView = currentWebView() ?: return
         val currentUrl = url ?: webView.url.orEmpty()
+        // 拦截页等 data: 地址不进地址栏、不写最近 URL
+        if (currentUrl.startsWith("data:")) return
         if (currentUrl.isNotEmpty()) Prefs.setLastUrl(this, currentUrl)
         addressBar.text = currentUrl.ifEmpty { "输入网址或回到主页" }
         val bookmarked = AppGraph.siteRepository.findByUrl(currentUrl) != null

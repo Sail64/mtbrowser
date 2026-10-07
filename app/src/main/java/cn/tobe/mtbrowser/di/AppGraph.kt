@@ -15,6 +15,7 @@ import cn.tobe.mtbrowser.domain.SslTrustPolicy
 import cn.tobe.mtbrowser.domain.SiteRepository
 import cn.tobe.mtbrowser.domain.DefaultCertificateAdvisor
 import cn.tobe.mtbrowser.domain.DefaultNavigationPolicy
+import cn.tobe.mtbrowser.domain.DomainWhitelist
 
 /**
  * 轻量依赖容器：应用的组合根。
@@ -37,6 +38,8 @@ object AppGraph {
         private set
     lateinit var probeThrottle: ProbeThrottle
         private set
+    lateinit var domainWhitelist: DomainWhitelist
+        private set
 
     fun init(context: Context) {
         val appContext = context.applicationContext
@@ -48,5 +51,6 @@ object AppGraph {
         sslTrustPolicy = DefaultSslTrustPolicy(certAdvisor)
         navigationPolicy = DefaultNavigationPolicy()
         probeThrottle = PrefProbeThrottleStore(appContext)
+        domainWhitelist = DomainWhitelist(appContext)
     }
 }

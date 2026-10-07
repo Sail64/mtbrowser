@@ -21,3 +21,6 @@ local.properties
 # APK files
 *.apk
 
+# 本地域名白名单（私密配置，不入库）
+app/src/main/assets/domain_whitelist.txt
+

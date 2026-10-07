@@ -17,6 +17,7 @@ import cn.tobe.mtbrowser.data.PrefSiteRepository
 import cn.tobe.mtbrowser.domain.CertReminderScheduler
 import cn.tobe.mtbrowser.domain.CertificateAdvisor
 import cn.tobe.mtbrowser.domain.ClientCertSelector
+import cn.tobe.mtbrowser.domain.DomainWhitelist
 import cn.tobe.mtbrowser.domain.NavigationPolicy
 import cn.tobe.mtbrowser.domain.SslTrustPolicy
 import cn.tobe.mtbrowser.domain.model.CertInfo
@@ -40,6 +41,7 @@ class BrowserWebViewClient(
     private val navigationPolicy: NavigationPolicy,
     private val sites: cn.tobe.mtbrowser.domain.SiteRepository,
     private val enhancers: List<PageEnhancer>,
+    private val whitelist: DomainWhitelist,
     private val onUrlChanged: (String) -> Unit,
     private val onPageBackground: (String?) -> Unit = {}
 ) : WebViewClient() {
@@ -47,6 +49,16 @@ class BrowserWebViewClient(
     companion object {
         private const val TAG = "BrowserWebViewClient"
         private const val CERT_CLEAR_COOLDOWN_MS = 5000L
+
+        /** 非白名单域名的本地拦截页（不发起网络请求）。 */
+        private const val BLOCKED_HTML =
+            "<html><head><meta name='viewport' content='width=device-width, initial-scale=1'>" +
+                "<style>body{font-family:sans-serif;background:#fff;color:#333;display:flex;" +
+                "align-items:center;justify-content:center;height:100vh;margin:0}" +
+                "div{text-align:center;padding:24px}h2{font-size:18px;margin:0 0 8px}" +
+                "p{font-size:13px;color:#888;margin:0}</style></head><body><div>" +
+                "<h2>访问被拦截</h2><p>{{HOST}}</p>" +
+                "<p style='margin-top:12px'>该域名不在允许访问的白名单内</p></div></body></html>"
     }
 
     private val lastCertClearTime = ConcurrentHashMap<String, Long>()
@@ -56,6 +68,12 @@ class BrowserWebViewClient(
 
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
         val url = request.url.toString()
+        // 白名单仅约束主框架导航；子资源（CDN 等）不受限
+        if (request.isForMainFrame && !whitelist.allows(url)) {
+            Log.w(TAG, "Blocked by domain whitelist: $url")
+            showBlockedPage(view, url)
+            return true
+        }
         val currentSite = view.url?.let { PrefSiteRepository.hostOf(it) }?.let { sites.byHost(it) }
         return when (navigationPolicy.decide(url, currentSite?.url)) {
             NavigationDecision.OPEN_IN_APP -> false
@@ -69,6 +87,30 @@ class BrowserWebViewClient(
                 true
             }
         }
+    }
+
+    /** 主框架导航兜底拦截：显式 loadUrl() 与重定向不经过 shouldOverrideUrlLoading，在此补位。 */
+    override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
+        super.doUpdateVisitedHistory(view, url, isReload)
+        if (isReload) return
+        if (!whitelist.allows(url)) {
+            Log.w(TAG, "Blocked by domain whitelist (history): $url")
+            view.stopLoading()
+            showBlockedPage(view, url)
+        }
+    }
+
+    /** 渲染本地拦截页；host 来自 URI 解析（[a-z0-9.-] 字符集），可直接内插。 */
+    private fun showBlockedPage(view: WebView, url: String) {
+        val host = try { java.net.URI(url).host } catch (e: Exception) { null } ?: "未知域名"
+        view.stopLoading()
+        view.loadDataWithBaseURL(
+            null,
+            BLOCKED_HTML.replace("{{HOST}}", host),
+            "text/html; charset=utf-8",
+            "utf-8",
+            null
+        )
     }
 
     // ---------- mTLS 客户端证书 ----------
