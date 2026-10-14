@@ -2,6 +2,7 @@ package cn.tobe.mtbrowser
 
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
@@ -493,16 +494,29 @@ class MainActivity : AppCompatActivity() {
         filePathCallback: ValueCallback<Array<Uri>>?,
         fileChooserParams: WebChromeClient.FileChooserParams?
     ): Boolean {
-        if (fileUploadCallback != null) {
-            fileUploadCallback?.onReceiveValue(null)
-            fileUploadCallback = null
+        Log.d(TAG, "onShowFileChooser: mode=${fileChooserParams?.mode}, accept=${fileChooserParams?.acceptTypes?.joinToString()}")
+        // 一次只允许一个挂起回调：旧回调先释放，避免 WebView 侧悬空卡死
+        fileUploadCallback?.onReceiveValue(null)
+        fileUploadCallback = filePathCallback ?: return false
+        val intent = try {
+            fileChooserParams?.createIntent()
+        } catch (e: Exception) {
+            Log.e(TAG, "createIntent failed", e); null
         }
-        fileUploadCallback = filePathCallback
-        val intent = fileChooserParams?.createIntent() ?: return false
+        if (intent == null) {
+            Log.w(TAG, "fileChooserParams is null or createIntent failed")
+            filePathCallback.onReceiveValue(null)
+            fileUploadCallback = null
+            return false
+        }
         return try {
             fileChooserLauncher.launch(intent)
             true
         } catch (e: Exception) {
+            // 无可处理该 Intent 的应用（ActivityNotFoundException 等）：
+            // 必须回 null 结束 WebView 侧回调，否则页面永远等不到结果
+            Log.e(TAG, "launch file chooser failed", e)
+            filePathCallback.onReceiveValue(null)
             fileUploadCallback = null
             false
         }
@@ -551,6 +565,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
+        private const val TAG = "MainActivity"
         private const val KEY_WEBVIEW_STATE = "webview_state"
         private const val KEY_IN_BROWSER = "in_browser"
     }
